@@ -38,10 +38,10 @@ function getSingletonYDoc() {
 }
 
 export class EditorStore {
-  private lastKeyNumber = 0
   protected values: Y.Map<FlatNodeValue>
   protected parentKeys: Y.Map<Key | null>
   protected state: Y.Map<unknown>
+  private lastKeyNumber = 0
 
   constructor(ydoc = getSingletonYDoc()) {
     this.values = ydoc.getMap('values')
