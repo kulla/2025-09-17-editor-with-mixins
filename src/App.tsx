@@ -160,3 +160,20 @@ class Transaction {
     this.setParentKey(key, parentKey)
   }
 }
+
+abstract class FlatNode<S extends NodeSpec = NodeSpec> {
+  constructor(
+    protected store: EditorStore,
+    public key: Key<S>,
+  ) {
+    invariant(store.has(key), `Key ${key} does not exist in the store`)
+  }
+
+  get value(): FlatValue<S> {
+    return this.store.getValue(this.key)
+  }
+
+  get parentKey(): Key | null {
+    return this.store.getParentKey(this.key)
+  }
+}
