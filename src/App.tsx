@@ -67,6 +67,15 @@ export class EditorStore {
     return Array.from(this.values.entries())
   }
 
+  update(updateFn: (tx: Transaction) => void) {
+    const tx = new Transaction(
+      (key) => this.getValue(key),
+      (key, value) => this.setValue(key, value),
+    )
+
+    updateFn(tx)
+  }
+
   private setValue(key: Key, value: FlatNodeValue) {
     this.values.set(key, value)
   }
