@@ -41,10 +41,12 @@ export class EditorStore {
   private lastKeyNumber = 0
   protected values: Y.Map<FlatNodeValue>
   protected parentKeys: Y.Map<Key | null>
+  protected state: Y.Map<unknown>
 
   constructor(ydoc = getSingletonYDoc()) {
     this.values = ydoc.getMap('values')
     this.parentKeys = ydoc.getMap('parentKeys')
+    this.state = ydoc.getMap('state')
   }
 
   getValue(key: Key): FlatNodeValue {
@@ -67,6 +69,14 @@ export class EditorStore {
     return Array.from(this.values.entries())
   }
 
+  get updateCount() {
+    const count = this.state.get('updateCount') ?? 0
+
+    invariant(typeof count === 'number', 'updateCount must be a number')
+
+    return count
+  }
+
   update(updateFn: (tx: Transaction) => void) {
     const tx = new Transaction(
       (key) => this.getValue(key),
@@ -76,6 +86,12 @@ export class EditorStore {
     )
 
     updateFn(tx)
+
+    this.incrementUpdateCount()
+  }
+
+  private incrementUpdateCount() {
+    this.state.set('updateCount', this.updateCount + 1)
   }
 
   private setValue(key: Key, value: FlatNodeValue) {
