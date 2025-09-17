@@ -42,6 +42,7 @@ export class EditorStore {
   protected parentKeys: Y.Map<Key | null>
   protected state: Y.Map<unknown>
   private lastKeyNumber = 0
+  private currentTransaction: Transaction | null = null
 
   constructor(ydoc = getSingletonYDoc()) {
     this.values = ydoc.getMap('values')
@@ -78,16 +79,24 @@ export class EditorStore {
   }
 
   update(updateFn: (tx: Transaction) => void) {
-    const tx = new Transaction(
+    if (this.currentTransaction) {
+      // If we're already in a transaction, just call the update function directly
+      updateFn(this.currentTransaction)
+      return
+    }
+
+    this.currentTransaction = new Transaction(
       (key) => this.getValue(key),
       (key, value) => this.setValue(key, value),
       (key, parentKey) => this.setParentKey(key, parentKey),
       (type) => this.generateKey(type),
     )
 
-    updateFn(tx)
+    updateFn(this.currentTransaction)
 
     this.incrementUpdateCount()
+
+    this.currentTransaction = null
   }
 
   private incrementUpdateCount() {
