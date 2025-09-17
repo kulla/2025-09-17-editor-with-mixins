@@ -18,7 +18,7 @@ export default function App() {
   )
 }
 
-type FlatNodeValue =
+type FlatValue =
   | Key
   | Record<string, Key>
   | Key[]
@@ -38,13 +38,13 @@ function getSingletonYDoc() {
 
 interface NodeDescription {
   type: string
-  flatNodeValue: FlatNodeValue
+  flatValue: FlatValue
   jsonValue: object | unknown[] | number | boolean | string
 }
 type Key<D extends NodeDescription = NodeDescription> = `${D['type']}:${number}`
 
 export class EditorStore {
-  protected values: Y.Map<FlatNodeValue>
+  protected values: Y.Map<FlatValue>
   protected parentKeys: Y.Map<Key | null>
   protected state: Y.Map<unknown>
   private lastKeyNumber = 0
@@ -56,7 +56,7 @@ export class EditorStore {
     this.state = ydoc.getMap('state')
   }
 
-  getValue(key: Key): FlatNodeValue {
+  getValue(key: Key): FlatValue {
     const value = this.values.get(key)
 
     invariant(value != null, `Value for key ${key} not found`)
@@ -109,7 +109,7 @@ export class EditorStore {
     this.state.set('updateCount', this.updateCount + 1)
   }
 
-  private setValue(key: Key, value: FlatNodeValue) {
+  private setValue(key: Key, value: FlatValue) {
     this.values.set(key, value)
   }
 
@@ -126,16 +126,13 @@ export class EditorStore {
 
 class Transaction {
   constructor(
-    private readonly getValue: (key: Key) => FlatNodeValue,
-    private readonly setValue: (key: Key, value: FlatNodeValue) => void,
+    private readonly getValue: (key: Key) => FlatValue,
+    private readonly setValue: (key: Key, value: FlatValue) => void,
     private readonly setParentKey: (key: Key, parentKey: Key | null) => void,
     private readonly generateKey: (type: string) => Key,
   ) {}
 
-  update(
-    key: Key,
-    updateFn: FlatNodeValue | ((current: FlatNodeValue) => FlatNodeValue),
-  ) {
+  update(key: Key, updateFn: FlatValue | ((current: FlatValue) => FlatValue)) {
     const currentValue = this.getValue(key)
     const newValue =
       typeof updateFn === 'function' ? updateFn(currentValue) : updateFn
@@ -146,7 +143,7 @@ class Transaction {
   insert(
     type: string,
     parentKey: Key | null,
-    createValue: (key: Key) => FlatNodeValue,
+    createValue: (key: Key) => FlatValue,
   ) {
     const key = this.generateKey(type)
     const value = createValue(key)
