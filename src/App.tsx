@@ -31,7 +31,7 @@ type FlatNodeValue =
 export class EditorStore {
   private lastKeyNumber = 0
   protected values: Y.Map<FlatNodeValue>
-  protected parentKeys: Y.Map<Key>
+  protected parentKeys: Y.Map<Key | null>
 
   constructor(ydoc = getSingletonYDoc()) {
     this.values = ydoc.getMap('values')
@@ -58,12 +58,12 @@ export class EditorStore {
     return Array.from(this.values.entries())
   }
 
-  private set(key: Key, value: FlatNodeValue, parentKey: Key | null) {
+  private setValue(key: Key, value: FlatNodeValue) {
     this.values.set(key, value)
+  }
 
-    if (parentKey) {
-      this.parentKeys.set(key, parentKey)
-    }
+  private setParentKey(key: Key, parentKey: Key | null) {
+    this.parentKeys.set(key, parentKey)
   }
 
   private generateKey(type: string): Key {
