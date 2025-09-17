@@ -53,6 +53,16 @@ export class EditorStore {
     return parentKey
   }
 
+  has(key: Key) {
+    if (this.values.has(key) && this.parentKeys.has(key)) {
+      return true
+    }
+    if (!this.values.has(key) && !this.parentKeys.has(key)) {
+      return false
+    }
+    throw new Error(`Inconsistent state for key ${key}`)
+  }
+
   getValueEntires() {
     return Array.from(this.values.entries())
   }
