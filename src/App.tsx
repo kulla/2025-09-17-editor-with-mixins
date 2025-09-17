@@ -45,22 +45,12 @@ export class EditorStore {
     return value
   }
 
-  getParentKey(key: Key): Key {
-    const parentKey = this.parentKeys.get(key)
-
-    invariant(parentKey != null, `Parent key for key ${key} not found`)
-
-    return parentKey
+  getParentKey(key: Key): Key | null {
+    return this.parentKeys.get(key) ?? null
   }
 
   has(key: Key) {
-    if (this.values.has(key) && this.parentKeys.has(key)) {
-      return true
-    }
-    if (!this.values.has(key) && !this.parentKeys.has(key)) {
-      return false
-    }
-    throw new Error(`Inconsistent state for key ${key}`)
+    return this.values.has(key)
   }
 
   getValueEntires() {
