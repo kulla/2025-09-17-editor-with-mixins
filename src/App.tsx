@@ -30,9 +30,11 @@ type FlatNodeValue =
 
 export class EditorStore {
   protected values: Y.Map<FlatNodeValue>
+  protected parentKeys: Y.Map<Key>
 
   constructor(ydoc = getSingletonYDoc()) {
     this.values = ydoc.getMap('values')
+    this.parentKeys = ydoc.getMap('parentKeys')
   }
 
   getValue(key: Key): FlatNodeValue {
@@ -41,6 +43,14 @@ export class EditorStore {
     invariant(value != null, `Value for key ${key} not found`)
 
     return value
+  }
+
+  getParentKey(key: Key): Key {
+    const parentKey = this.parentKeys.get(key)
+
+    invariant(parentKey != null, `Parent key for key ${key} not found`)
+
+    return parentKey
   }
 
   getValueEntires() {
