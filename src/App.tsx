@@ -39,6 +39,7 @@ interface NodeSpec {
     | string
   jsonValue: object | unknown[] | number | boolean | string
 }
+type Type<S extends NodeSpec> = S['type']
 type Key<S extends NodeSpec = NodeSpec> = `${S['type']}:${number}`
 type FlatValue<S extends NodeSpec = NodeSpec> = S['flatValue']
 
@@ -55,7 +56,7 @@ export class EditorStore {
     this.state = ydoc.getMap('state')
   }
 
-  getValue(key: Key): FlatValue {
+  getValue<S extends NodeSpec>(key: Key<S>): FlatValue<S> {
     const value = this.values.get(key)
 
     invariant(value != null, `Value for key ${key} not found`)
@@ -108,7 +109,7 @@ export class EditorStore {
     this.state.set('updateCount', this.updateCount + 1)
   }
 
-  private setValue(key: Key, value: FlatValue) {
+  private setValue<S extends NodeSpec>(key: Key<S>, value: FlatValue<S>) {
     this.values.set(key, value)
   }
 
@@ -116,7 +117,7 @@ export class EditorStore {
     this.parentKeys.set(key, parentKey)
   }
 
-  private generateKey(type: string): Key {
+  private generateKey<S extends NodeSpec>(type: Type<S>): Key<S> {
     this.lastKeyNumber += 1
 
     return `${type}:${this.lastKeyNumber}`
@@ -125,13 +126,21 @@ export class EditorStore {
 
 class Transaction {
   constructor(
-    private readonly getValue: (key: Key) => FlatValue,
-    private readonly setValue: (key: Key, value: FlatValue) => void,
+    private readonly getValue: <S extends NodeSpec>(
+      key: Key<S>,
+    ) => FlatValue<S>,
+    private readonly setValue: <S extends NodeSpec>(
+      key: Key<S>,
+      value: FlatValue<S>,
+    ) => void,
     private readonly setParentKey: (key: Key, parentKey: Key | null) => void,
     private readonly generateKey: (type: string) => Key,
   ) {}
 
-  update(key: Key, updateFn: FlatValue | ((current: FlatValue) => FlatValue)) {
+  update<S extends NodeSpec>(
+    key: Key<S>,
+    updateFn: FlatValue<S> | ((current: FlatValue<S>) => FlatValue<S>),
+  ) {
     const currentValue = this.getValue(key)
     const newValue =
       typeof updateFn === 'function' ? updateFn(currentValue) : updateFn
@@ -139,10 +148,10 @@ class Transaction {
     this.setValue(key, newValue)
   }
 
-  insert(
-    type: string,
+  insert<S extends NodeSpec>(
+    type: Type<S>,
     parentKey: Key | null,
-    createValue: (key: Key) => FlatValue,
+    createValue: (key: Key<S>) => FlatValue<S>,
   ) {
     const key = this.generateKey(type)
     const value = createValue(key)
