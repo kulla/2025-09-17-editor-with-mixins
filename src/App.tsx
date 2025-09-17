@@ -81,3 +81,21 @@ export class EditorStore {
     return `${type}:${this.lastKeyNumber}`
   }
 }
+
+class Transaction {
+  constructor(
+    private readonly getValue: (key: Key) => FlatNodeValue,
+    private readonly setValue: (key: Key, value: FlatNodeValue) => void,
+  ) {}
+
+  update(
+    key: Key,
+    updateFn: FlatNodeValue | ((current: FlatNodeValue) => FlatNodeValue),
+  ) {
+    const currentValue = this.getValue(key)
+    const newValue =
+      typeof updateFn === 'function' ? updateFn(currentValue) : updateFn
+
+    this.setValue(key, newValue)
+  }
+}
