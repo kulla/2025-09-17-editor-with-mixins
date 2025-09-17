@@ -29,6 +29,7 @@ type FlatNodeValue =
   | string
 
 export class EditorStore {
+  private lastKeyNumber = 0
   protected values: Y.Map<FlatNodeValue>
   protected parentKeys: Y.Map<Key>
 
@@ -63,6 +64,12 @@ export class EditorStore {
     if (parentKey) {
       this.parentKeys.set(key, parentKey)
     }
+  }
+
+  private generateKey(type: string): Key {
+    this.lastKeyNumber += 1
+
+    return `${type}:${this.lastKeyNumber}`
   }
 }
 
