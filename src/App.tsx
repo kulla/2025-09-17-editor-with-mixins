@@ -27,7 +27,7 @@ function getSingletonYDoc() {
   return ydoc
 }
 
-interface NodeDescription {
+interface NodeSpec {
   type: string
   flatValue:
     | Key
@@ -39,8 +39,8 @@ interface NodeDescription {
     | string
   jsonValue: object | unknown[] | number | boolean | string
 }
-type Key<D extends NodeDescription = NodeDescription> = `${D['type']}:${number}`
-type FlatValue<D extends NodeDescription = NodeDescription> = D['flatValue']
+type Key<S extends NodeSpec = NodeSpec> = `${S['type']}:${number}`
+type FlatValue<S extends NodeSpec = NodeSpec> = S['flatValue']
 
 export class EditorStore {
   protected values: Y.Map<FlatValue>
