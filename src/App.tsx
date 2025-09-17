@@ -42,6 +42,10 @@ export class EditorStore {
 
     return value
   }
+
+  getValueEntires() {
+    return Array.from(this.values.entries())
+  }
 }
 
 let ydoc: Y.Doc | null = null
