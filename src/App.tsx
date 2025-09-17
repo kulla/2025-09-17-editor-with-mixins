@@ -1,7 +1,7 @@
 import '@picocss/pico/css/pico.min.css'
 import './App.css'
 import { invariant } from 'es-toolkit'
-import type * as Y from 'yjs'
+import * as Y from 'yjs'
 import { DebugPanel } from './components/debug-panel'
 
 export default function App() {
@@ -29,7 +29,11 @@ type FlatNodeValue =
   | string
 
 export class EditorStore {
-  protected values = new Map<Key, FlatNodeValue>()
+  protected values: Y.Map<FlatNodeValue>
+
+  constructor(ydoc = getSingletonYDoc()) {
+    this.values = ydoc.getMap('values')
+  }
 
   getValue(key: Key): FlatNodeValue {
     const value = this.values.get(key)
@@ -38,4 +42,13 @@ export class EditorStore {
 
     return value
   }
+}
+
+let ydoc: Y.Doc | null = null
+
+function getSingletonYDoc() {
+  if (!ydoc) {
+    ydoc = new Y.Doc()
+  }
+  return ydoc
 }
