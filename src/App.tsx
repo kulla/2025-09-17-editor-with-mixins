@@ -18,7 +18,6 @@ export default function App() {
   )
 }
 
-type Key<T extends string = string> = `${T}:${number}`
 type FlatNodeValue =
   | Key
   | Record<string, Key>
@@ -36,6 +35,13 @@ function getSingletonYDoc() {
   }
   return ydoc
 }
+
+interface NodeDescription {
+  type: string
+  flatNodeValue: FlatNodeValue
+  jsonValue: object | unknown[] | number | boolean | string
+}
+type Key<D extends NodeDescription = NodeDescription> = `${D['type']}:${number}`
 
 export class EditorStore {
   protected values: Y.Map<FlatNodeValue>
