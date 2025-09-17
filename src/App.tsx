@@ -56,6 +56,14 @@ export class EditorStore {
   getValueEntires() {
     return Array.from(this.values.entries())
   }
+
+  private set(key: Key, value: FlatNodeValue, parentKey: Key | null) {
+    this.values.set(key, value)
+
+    if (parentKey) {
+      this.parentKeys.set(key, parentKey)
+    }
+  }
 }
 
 let ydoc: Y.Doc | null = null
