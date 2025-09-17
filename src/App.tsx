@@ -1,5 +1,7 @@
 import '@picocss/pico/css/pico.min.css'
 import './App.css'
+import { invariant } from 'es-toolkit'
+import type * as Y from 'yjs'
 import { DebugPanel } from './components/debug-panel'
 
 export default function App() {
@@ -14,4 +16,26 @@ export default function App() {
       />
     </main>
   )
+}
+
+type Key<T extends string = string> = `${T}:${number}`
+type FlatNodeValue =
+  | Key
+  | Record<string, Key>
+  | Key[]
+  | Y.Text
+  | number
+  | boolean
+  | string
+
+export class EditorStore {
+  protected values = new Map<Key, FlatNodeValue>()
+
+  getValue(key: Key): FlatNodeValue {
+    const value = this.values.get(key)
+
+    invariant(value != null, `Value for key ${key} not found`)
+
+    return value
+  }
 }

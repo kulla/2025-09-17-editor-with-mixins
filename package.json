@@ -16,7 +16,8 @@
     "clsx": "^2.1.1",
     "es-toolkit": "^1.39.10",
     "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react-dom": "^19.1.1",
+    "yjs": "^13.6.27"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.2.4",
