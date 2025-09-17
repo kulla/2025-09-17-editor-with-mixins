@@ -1,0 +1,31 @@
+{
+  "name": "rsbuild-react-bun-biome-starter-template",
+  "version": "1.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "build": "rsbuild build",
+    "check": "biome check --write",
+    "dev": "rsbuild dev --open",
+    "format": "biome format --write",
+    "preview": "rsbuild preview"
+  },
+  "dependencies": {
+    "@picocss/pico": "^2.1.1",
+    "clsx": "^2.1.1",
+    "es-toolkit": "^1.39.10",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.2.4",
+    "@rsbuild/core": "^1.5.8",
+    "@rsbuild/plugin-react": "^1.4.0",
+    "@tailwindcss/postcss": "^4.1.13",
+    "@types/react-dom": "^19.1.9",
+    "daisyui": "^5.1.12",
+    "tailwindcss": "^4.1.13",
+    "typescript": "^5.9.2"
+  }
+}
