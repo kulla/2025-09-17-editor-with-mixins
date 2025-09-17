@@ -71,6 +71,8 @@ export class EditorStore {
     const tx = new Transaction(
       (key) => this.getValue(key),
       (key, value) => this.setValue(key, value),
+      (key, parentKey) => this.setParentKey(key, parentKey),
+      (type) => this.generateKey(type),
     )
 
     updateFn(tx)
@@ -95,6 +97,8 @@ class Transaction {
   constructor(
     private readonly getValue: (key: Key) => FlatNodeValue,
     private readonly setValue: (key: Key, value: FlatNodeValue) => void,
+    private readonly setParentKey: (key: Key, parentKey: Key | null) => void,
+    private readonly generateKey: (type: string) => Key,
   ) {}
 
   update(
@@ -106,5 +110,17 @@ class Transaction {
       typeof updateFn === 'function' ? updateFn(currentValue) : updateFn
 
     this.setValue(key, newValue)
+  }
+
+  insert(
+    type: string,
+    parentKey: Key | null,
+    createValue: (key: Key) => FlatNodeValue,
+  ) {
+    const key = this.generateKey(type)
+    const value = createValue(key)
+
+    this.setValue(key, value)
+    this.setParentKey(key, parentKey)
   }
 }
