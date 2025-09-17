@@ -83,20 +83,20 @@ export class EditorStore {
       // If we're already in a transaction, just call the update function directly
       updateFn(this.currentTransaction)
       return
+    } else {
+      this.currentTransaction = new Transaction(
+        (key) => this.getValue(key),
+        (key, value) => this.setValue(key, value),
+        (key, parentKey) => this.setParentKey(key, parentKey),
+        (type) => this.generateKey(type),
+      )
+
+      updateFn(this.currentTransaction)
+
+      this.incrementUpdateCount()
+
+      this.currentTransaction = null
     }
-
-    this.currentTransaction = new Transaction(
-      (key) => this.getValue(key),
-      (key, value) => this.setValue(key, value),
-      (key, parentKey) => this.setParentKey(key, parentKey),
-      (type) => this.generateKey(type),
-    )
-
-    updateFn(this.currentTransaction)
-
-    this.incrementUpdateCount()
-
-    this.currentTransaction = null
   }
 
   private incrementUpdateCount() {
