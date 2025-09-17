@@ -28,6 +28,15 @@ type FlatNodeValue =
   | boolean
   | string
 
+let ydoc: Y.Doc | null = null
+
+function getSingletonYDoc() {
+  if (!ydoc) {
+    ydoc = new Y.Doc()
+  }
+  return ydoc
+}
+
 export class EditorStore {
   private lastKeyNumber = 0
   protected values: Y.Map<FlatNodeValue>
@@ -71,13 +80,4 @@ export class EditorStore {
 
     return `${type}:${this.lastKeyNumber}`
   }
-}
-
-let ydoc: Y.Doc | null = null
-
-function getSingletonYDoc() {
-  if (!ydoc) {
-    ydoc = new Y.Doc()
-  }
-  return ydoc
 }
