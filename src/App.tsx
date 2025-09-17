@@ -18,15 +18,6 @@ export default function App() {
   )
 }
 
-type FlatValue =
-  | Key
-  | Record<string, Key>
-  | Key[]
-  | Y.Text
-  | number
-  | boolean
-  | string
-
 let ydoc: Y.Doc | null = null
 
 function getSingletonYDoc() {
@@ -38,10 +29,18 @@ function getSingletonYDoc() {
 
 interface NodeDescription {
   type: string
-  flatValue: FlatValue
+  flatValue:
+    | Key
+    | Record<string, Key>
+    | Key[]
+    | Y.Text
+    | number
+    | boolean
+    | string
   jsonValue: object | unknown[] | number | boolean | string
 }
 type Key<D extends NodeDescription = NodeDescription> = `${D['type']}:${number}`
+type FlatValue<D extends NodeDescription = NodeDescription> = D['flatValue']
 
 export class EditorStore {
   protected values: Y.Map<FlatValue>
