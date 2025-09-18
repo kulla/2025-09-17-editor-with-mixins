@@ -180,7 +180,7 @@ abstract class FlatNode<T extends TypeName> {
 }
 
 interface NodeType<T extends TypeName> {
-  type: T
+  name: T
   FlatNode: new (store: EditorStore, key: Key<T>) => FlatNode<T>
   storeJsonValue: (
     tx: Transaction,
@@ -190,7 +190,7 @@ interface NodeType<T extends TypeName> {
 }
 
 const TextType: NodeType<'text'> = {
-  type: 'text',
+  name: 'text',
   FlatNode: class TextNode extends FlatNode<'text'> {
     get text(): string {
       return (this.value as Y.Text).toString()
