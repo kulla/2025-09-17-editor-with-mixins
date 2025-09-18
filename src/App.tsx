@@ -181,6 +181,8 @@ abstract class FlatNode<T extends TypeName> {
   get parentKey(): Key | null {
     return this.store.getParentKey(this.key)
   }
+
+  abstract toJsonValue(): JsonValue<T>
 }
 
 abstract class NodeType<T extends TypeName> {
@@ -199,7 +201,13 @@ abstract class NodeType<T extends TypeName> {
 export const RootType = new (class RootType extends NodeType<'root'> {
   override name = 'root' as const
 
-  override FlatNode = class RootNode extends FlatNode<'root'> {}
+  override FlatNode = class RootNode extends FlatNode<'root'> {
+    override toJsonValue(): JsonValue<'root'> {
+      const childNode = TextType.createFlatNode(this.store, this.value)
+
+      return { type: 'document', content: childNode.toJsonValue() }
+    }
+  }
 
   storeJsonValue(tx: Transaction, value: JsonValue<'root'>): Key<'root'> {
     return tx.insert('root', null, (key) =>
@@ -219,7 +227,11 @@ abstract class ChildNodeType<T extends TypeName> extends NodeType<T> {
 const TextType = new (class TextType extends ChildNodeType<'text'> {
   override name = 'text' as const
 
-  override FlatNode = class TextNode extends FlatNode<'text'> {}
+  override FlatNode = class TextNode extends FlatNode<'text'> {
+    override toJsonValue(): JsonValue<'text'> {
+      return this.value.toString()
+    }
+  }
 
   storeJsonValue(
     tx: Transaction,
