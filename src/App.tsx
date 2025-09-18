@@ -113,10 +113,10 @@ export class EditorStore {
     this.parentKeys.set(key, parentKey)
   }
 
-  private generateKey<T extends TypeName>(type: T): Key<T> {
+  private generateKey<T extends TypeName>(typeName: T): Key<T> {
     this.lastKeyNumber += 1
 
-    return `${type}:${this.lastKeyNumber}`
+    return `${typeName}:${this.lastKeyNumber}`
   }
 }
 
@@ -133,7 +133,7 @@ class Transaction {
       key: Key<T>,
       parentKey: Key | null,
     ) => void,
-    private readonly generateKey: <T extends TypeName>(type: T) => Key<T>,
+    private readonly generateKey: <T extends TypeName>(typeName: T) => Key<T>,
   ) {}
 
   update<T extends TypeName>(
@@ -148,11 +148,11 @@ class Transaction {
   }
 
   insert<T extends TypeName>(
-    type: T,
+    typeName: T,
     parentKey: Key | null,
     createValue: (key: Key<T>) => FlatValue<T>,
   ): Key<T> {
-    const key = this.generateKey(type)
+    const key = this.generateKey(typeName)
     const value = createValue(key)
 
     this.setValue(key, value)
