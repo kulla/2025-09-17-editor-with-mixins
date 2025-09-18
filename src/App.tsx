@@ -32,6 +32,10 @@ interface NodeMap {
     flatValue: Y.Text
     jsonValue: string
   }
+  root: {
+    flatValue: Key<'text'>
+    jsonValue: { type: 'document'; content: JsonValue<'text'> }
+  }
 }
 
 type TypeName = keyof NodeMap
@@ -187,18 +191,32 @@ abstract class NodeType<T extends TypeName> {
     key: Key<T>,
   ) => FlatNode<T>
 
-  abstract storeJsonValue(
-    tx: Transaction,
-    parentKey: Key | null,
-    value: JsonValue<T>,
-  ): Key<T>
-
   createFlatNode(store: EditorStore, key: Key<T>): FlatNode<T> {
     return new this.FlatNode(store, key)
   }
 }
 
-class TextType extends NodeType<'text'> {
+export const RootType = new (class RootType extends NodeType<'root'> {
+  override name = 'root' as const
+
+  override FlatNode = class RootNode extends FlatNode<'root'> {}
+
+  storeJsonValue(tx: Transaction, value: JsonValue<'root'>): Key<'root'> {
+    return tx.insert('root', null, (key) =>
+      TextType.storeJsonValue(tx, key, value.content),
+    )
+  }
+})()
+
+abstract class ChildNodeType<T extends TypeName> extends NodeType<T> {
+  abstract storeJsonValue(
+    tx: Transaction,
+    parentKey: Key,
+    value: JsonValue<T>,
+  ): Key<T>
+}
+
+const TextType = new (class TextType extends ChildNodeType<'text'> {
   override name = 'text' as const
 
   override FlatNode = class TextNode extends FlatNode<'text'> {}
@@ -210,4 +228,4 @@ class TextType extends NodeType<'text'> {
   ): Key<'text'> {
     return tx.insert('text', parentKey, () => new Y.Text(value))
   }
-}
+})()
