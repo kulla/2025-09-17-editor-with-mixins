@@ -27,15 +27,18 @@ function getSingletonYDoc() {
   return ydoc
 }
 
+interface WrappedNodeSpec<T extends TypeName, C extends TypeName> {
+  flatValue: Key<C>
+  jsonValue: { type: T; value: JsonValue<C> }
+  childType: C
+}
+
 interface NodeMap {
   text: {
     flatValue: Y.Text
     jsonValue: string
   }
-  root: {
-    flatValue: Key<'text'>
-    jsonValue: { type: 'root'; value: JsonValue<'text'> }
-  }
+  root: WrappedNodeSpec<'root', 'text'>
 }
 
 type TypeName = keyof NodeMap
@@ -178,7 +181,9 @@ abstract class FlatNode<T extends TypeName> {
     return this.store.getValue(this.key)
   }
 
-  abstract get parentKey(): Key | null
+  get parentKey(): Key | null {
+    return this.store.getParentKey(this.key)
+  }
 
   abstract toJsonValue(): JsonValue<T>
 }
@@ -193,6 +198,40 @@ abstract class NodeType<T extends TypeName> {
 
   createFlatNode(store: EditorStore, key: Key<T>): FlatNode<T> {
     return new this.FlatNode(store, key)
+  }
+}
+
+type WrappedNodeTypeName = {
+  [T in TypeName]: NodeMap[T] extends WrappedNodeSpec<T, TypeName> ? T : never
+}[TypeName]
+
+function WrappedNode<
+  T extends WrappedNodeTypeName,
+  C extends NodeMap[T]['childType'],
+>(typeName: T, childType: ChildNodeType<C>) {
+  return class extends ChildNodeType<T> {
+    override name = typeName
+
+    override FlatNode = class extends FlatNode<T> {
+      override toJsonValue(): JsonValue<T> {
+        const childNode = childType.createFlatNode(
+          this.store,
+          this.value as Key<C>,
+        )
+
+        return { type: typeName, value: childNode.toJsonValue() }
+      }
+    }
+
+    override storeJsonValue(
+      tx: Transaction,
+      parentKey: Key | null,
+      value: JsonValue<T>,
+    ): Key<T> {
+      return tx.insert(this.name, parentKey, (key) =>
+        childType.storeJsonValue(tx, key, value.value),
+      )
+    }
   }
 }
 
