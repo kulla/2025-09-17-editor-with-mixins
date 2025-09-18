@@ -27,22 +27,17 @@ function getSingletonYDoc() {
   return ydoc
 }
 
-interface NodeSpec {
-  type: string
-  flatValue:
-    | Key
-    | Record<string, Key>
-    | Key[]
-    | Y.Text
-    | number
-    | boolean
-    | string
-  jsonValue: object | unknown[] | number | boolean | string
+interface NodeMap {
+  text: {
+    flatValue: Y.Text
+    jsonValue: string
+  }
 }
-type Type<S extends NodeSpec> = S['type']
-type Key<S extends NodeSpec = NodeSpec> = `${S['type']}:${number}`
-type FlatValue<S extends NodeSpec = NodeSpec> = S['flatValue']
-type JsonValue<S extends NodeSpec = NodeSpec> = S['jsonValue']
+
+type TypeName = keyof NodeMap
+type Key<T extends TypeName = TypeName> = `${T}:${number}`
+type FlatValue<T extends TypeName = TypeName> = NodeMap[T]['flatValue']
+type JsonValue<T extends TypeName> = NodeMap[T]['jsonValue']
 
 export class EditorStore {
   protected values: Y.Map<FlatValue>
@@ -57,7 +52,7 @@ export class EditorStore {
     this.state = ydoc.getMap('state')
   }
 
-  getValue<S extends NodeSpec>(key: Key<S>): FlatValue<S> {
+  getValue<T extends TypeName>(key: Key<T>): FlatValue<T> {
     const value = this.values.get(key)
 
     invariant(value != null, `Value for key ${key} not found`)
@@ -65,11 +60,11 @@ export class EditorStore {
     return value
   }
 
-  getParentKey(key: Key): Key | null {
+  getParentKey<T extends TypeName>(key: Key<T>): Key | null {
     return this.parentKeys.get(key) ?? null
   }
 
-  has(key: Key) {
+  has<T extends TypeName>(key: Key<T>): boolean {
     return this.values.has(key)
   }
 
@@ -110,15 +105,15 @@ export class EditorStore {
     this.state.set('updateCount', this.updateCount + 1)
   }
 
-  private setValue<S extends NodeSpec>(key: Key<S>, value: FlatValue<S>) {
+  private setValue<T extends TypeName>(key: Key<T>, value: FlatValue<T>) {
     this.values.set(key, value)
   }
 
-  private setParentKey(key: Key, parentKey: Key | null) {
+  private setParentKey<T extends TypeName>(key: Key<T>, parentKey: Key | null) {
     this.parentKeys.set(key, parentKey)
   }
 
-  private generateKey<S extends NodeSpec>(type: Type<S>): Key<S> {
+  private generateKey<T extends TypeName>(type: T): Key<T> {
     this.lastKeyNumber += 1
 
     return `${type}:${this.lastKeyNumber}`
@@ -127,20 +122,23 @@ export class EditorStore {
 
 class Transaction {
   constructor(
-    private readonly getValue: <S extends NodeSpec>(
-      key: Key<S>,
-    ) => FlatValue<S>,
-    private readonly setValue: <S extends NodeSpec>(
-      key: Key<S>,
-      value: FlatValue<S>,
+    private readonly getValue: <T extends TypeName>(
+      key: Key<T>,
+    ) => FlatValue<T>,
+    private readonly setValue: <T extends TypeName>(
+      key: Key<T>,
+      value: FlatValue<T>,
     ) => void,
-    private readonly setParentKey: (key: Key, parentKey: Key | null) => void,
-    private readonly generateKey: (type: string) => Key,
+    private readonly setParentKey: <T extends TypeName>(
+      key: Key<T>,
+      parentKey: Key | null,
+    ) => void,
+    private readonly generateKey: <T extends TypeName>(type: T) => Key<T>,
   ) {}
 
-  update<S extends NodeSpec>(
-    key: Key<S>,
-    updateFn: FlatValue<S> | ((current: FlatValue<S>) => FlatValue<S>),
+  update<T extends TypeName>(
+    key: Key<T>,
+    updateFn: FlatValue<T> | ((current: FlatValue<T>) => FlatValue<T>),
   ) {
     const currentValue = this.getValue(key)
     const newValue =
@@ -149,11 +147,11 @@ class Transaction {
     this.setValue(key, newValue)
   }
 
-  insert<S extends NodeSpec>(
-    type: Type<S>,
+  insert<T extends TypeName>(
+    type: T,
     parentKey: Key | null,
-    createValue: (key: Key<S>) => FlatValue<S>,
-  ): Key<S> {
+    createValue: (key: Key<T>) => FlatValue<T>,
+  ): Key<T> {
     const key = this.generateKey(type)
     const value = createValue(key)
 
@@ -164,15 +162,15 @@ class Transaction {
   }
 }
 
-abstract class FlatNode<S extends NodeSpec = NodeSpec> {
+abstract class FlatNode<T extends TypeName> {
   constructor(
     protected store: EditorStore,
-    public key: Key<S>,
+    public key: Key<T>,
   ) {
     invariant(store.has(key), `Key ${key} does not exist in the store`)
   }
 
-  get value(): FlatValue<S> {
+  get value(): FlatValue<T> {
     return this.store.getValue(this.key)
   }
 
@@ -181,30 +179,24 @@ abstract class FlatNode<S extends NodeSpec = NodeSpec> {
   }
 }
 
-interface NodeType<S extends NodeSpec> {
-  type: Type<S>
-  FlatNode: new (store: EditorStore, key: Key<S>) => FlatNode<S>
+interface NodeType<T extends TypeName> {
+  type: T
+  FlatNode: new (store: EditorStore, key: Key<T>) => FlatNode<T>
   storeJsonValue: (
     tx: Transaction,
     parentKey: Key | null,
-    value: JsonValue<S>,
-  ) => Key<S>
+    value: JsonValue<T>,
+  ) => Key<T>
 }
 
-type TextSpec = {
-  type: 'text'
-  flatValue: Y.Text
-  jsonValue: string
-}
-
-const TextType: NodeType<TextSpec> = {
+const TextType: NodeType<'text'> = {
   type: 'text',
-  FlatNode: class TextNode extends FlatNode<TextSpec> {
+  FlatNode: class TextNode extends FlatNode<'text'> {
     get text(): string {
       return (this.value as Y.Text).toString()
     }
   },
   storeJsonValue: (tx, parentKey, value) => {
-    return tx.insert<TextSpec>('text', parentKey, () => new Y.Text(value))
+    return tx.insert('text', parentKey, () => new Y.Text(value))
   },
 }
