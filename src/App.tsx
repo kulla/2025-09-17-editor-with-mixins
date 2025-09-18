@@ -201,11 +201,7 @@ abstract class NodeType<T extends TypeName> {
 class TextType extends NodeType<'text'> {
   override name = 'text' as const
 
-  override FlatNode = class TextNode extends FlatNode<'text'> {
-    get text(): string {
-      return (this.value as Y.Text).toString()
-    }
-  }
+  override FlatNode = class TextNode extends FlatNode<'text'> {}
 
   storeJsonValue(
     tx: Transaction,
