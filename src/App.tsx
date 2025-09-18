@@ -179,24 +179,39 @@ abstract class FlatNode<T extends TypeName> {
   }
 }
 
-interface NodeType<T extends TypeName> {
-  name: T
-  FlatNode: new (store: EditorStore, key: Key<T>) => FlatNode<T>
-  storeJsonValue: (
+abstract class NodeType<T extends TypeName> {
+  abstract readonly name: T
+
+  abstract readonly FlatNode: new (
+    store: EditorStore,
+    key: Key<T>,
+  ) => FlatNode<T>
+
+  abstract storeJsonValue(
     tx: Transaction,
     parentKey: Key | null,
     value: JsonValue<T>,
-  ) => Key<T>
+  ): Key<T>
+
+  createFlatNode(store: EditorStore, key: Key<T>): FlatNode<T> {
+    return new this.FlatNode(store, key)
+  }
 }
 
-const TextType: NodeType<'text'> = {
-  name: 'text',
-  FlatNode: class TextNode extends FlatNode<'text'> {
+class TextType extends NodeType<'text'> {
+  override name = 'text' as const
+
+  override FlatNode = class TextNode extends FlatNode<'text'> {
     get text(): string {
       return (this.value as Y.Text).toString()
     }
-  },
-  storeJsonValue: (tx, parentKey, value) => {
+  }
+
+  storeJsonValue(
+    tx: Transaction,
+    parentKey: Key,
+    value: JsonValue<'text'>,
+  ): Key<'text'> {
     return tx.insert('text', parentKey, () => new Y.Text(value))
-  },
+  }
 }
