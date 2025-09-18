@@ -178,9 +178,7 @@ abstract class FlatNode<T extends TypeName> {
     return this.store.getValue(this.key)
   }
 
-  get parentKey(): Key | null {
-    return this.store.getParentKey(this.key)
-  }
+  abstract get parentKey(): Key | null
 
   abstract toJsonValue(): JsonValue<T>
 }
@@ -202,6 +200,10 @@ export const RootType = new (class RootType extends NodeType<'root'> {
   override name = 'root' as const
 
   override FlatNode = class RootNode extends FlatNode<'root'> {
+    override get parentKey(): null {
+      return null
+    }
+
     override toJsonValue(): JsonValue<'root'> {
       const childNode = TextType.createFlatNode(this.store, this.value)
 
