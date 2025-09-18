@@ -201,6 +201,34 @@ abstract class NodeType<T extends TypeName> {
   }
 }
 
+abstract class ChildNodeType<T extends TypeName> extends NodeType<T> {
+  abstract storeJsonValue(
+    tx: Transaction,
+    parentKey: Key,
+    value: JsonValue<T>,
+  ): Key<T>
+}
+
+const TextType = new (class TextType extends ChildNodeType<'text'> {
+  override name = 'text' as const
+
+  override get FlatNode() {
+    return class TextNode extends FlatNode<'text'> {
+      override toJsonValue(): JsonValue<'text'> {
+        return this.value.toString()
+      }
+    }
+  }
+
+  override storeJsonValue(
+    tx: Transaction,
+    parentKey: Key,
+    value: JsonValue<'text'>,
+  ): Key<'text'> {
+    return tx.insert('text', parentKey, () => new Y.Text(value))
+  }
+})()
+
 type WrappedNodeTypeName = {
   [T in TypeName]: NodeMap[T] extends WrappedNodeSpec<T, TypeName> ? T : never
 }[TypeName]
@@ -236,34 +264,6 @@ function WrappedNodeType<
     }
   }
 }
-
-abstract class ChildNodeType<T extends TypeName> extends NodeType<T> {
-  abstract storeJsonValue(
-    tx: Transaction,
-    parentKey: Key,
-    value: JsonValue<T>,
-  ): Key<T>
-}
-
-const TextType = new (class TextType extends ChildNodeType<'text'> {
-  override name = 'text' as const
-
-  override get FlatNode() {
-    return class TextNode extends FlatNode<'text'> {
-      override toJsonValue(): JsonValue<'text'> {
-        return this.value.toString()
-      }
-    }
-  }
-
-  override storeJsonValue(
-    tx: Transaction,
-    parentKey: Key,
-    value: JsonValue<'text'>,
-  ): Key<'text'> {
-    return tx.insert('text', parentKey, () => new Y.Text(value))
-  }
-})()
 
 export const RootType = new (class RootType extends WrappedNodeType(
   'root',
