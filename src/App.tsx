@@ -42,6 +42,7 @@ interface NodeSpec {
 type Type<S extends NodeSpec> = S['type']
 type Key<S extends NodeSpec = NodeSpec> = `${S['type']}:${number}`
 type FlatValue<S extends NodeSpec = NodeSpec> = S['flatValue']
+type JsonValue<S extends NodeSpec = NodeSpec> = S['jsonValue']
 
 export class EditorStore {
   protected values: Y.Map<FlatValue>
@@ -152,12 +153,14 @@ class Transaction {
     type: Type<S>,
     parentKey: Key | null,
     createValue: (key: Key<S>) => FlatValue<S>,
-  ) {
+  ): Key<S> {
     const key = this.generateKey(type)
     const value = createValue(key)
 
     this.setValue(key, value)
     this.setParentKey(key, parentKey)
+
+    return key
   }
 }
 
@@ -176,4 +179,32 @@ abstract class FlatNode<S extends NodeSpec = NodeSpec> {
   get parentKey(): Key | null {
     return this.store.getParentKey(this.key)
   }
+}
+
+interface NodeType<S extends NodeSpec> {
+  type: Type<S>
+  FlatNode: new (store: EditorStore, key: Key<S>) => FlatNode<S>
+  storeJsonValue: (
+    tx: Transaction,
+    parentKey: Key | null,
+    value: JsonValue<S>,
+  ) => Key<S>
+}
+
+type TextSpec = {
+  type: 'text'
+  flatValue: Y.Text
+  jsonValue: string
+}
+
+const TextType: NodeType<TextSpec> = {
+  type: 'text',
+  FlatNode: class TextNode extends FlatNode<TextSpec> {
+    get text(): string {
+      return (this.value as Y.Text).toString()
+    }
+  },
+  storeJsonValue: (tx, parentKey, value) => {
+    return tx.insert<TextSpec>('text', parentKey, () => new Y.Text(value))
+  },
 }
