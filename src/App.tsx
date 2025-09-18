@@ -34,7 +34,7 @@ interface NodeMap {
   }
   root: {
     flatValue: Key<'text'>
-    jsonValue: { type: 'document'; content: JsonValue<'text'> }
+    jsonValue: { type: 'root'; value: JsonValue<'text'> }
   }
 }
 
@@ -205,13 +205,13 @@ export const RootType = new (class RootType extends NodeType<'root'> {
     override toJsonValue(): JsonValue<'root'> {
       const childNode = TextType.createFlatNode(this.store, this.value)
 
-      return { type: 'document', content: childNode.toJsonValue() }
+      return { type: 'root', value: childNode.toJsonValue() }
     }
   }
 
   storeJsonValue(tx: Transaction, value: JsonValue<'root'>): Key<'root'> {
     return tx.insert('root', null, (key) =>
-      TextType.storeJsonValue(tx, key, value.content),
+      TextType.storeJsonValue(tx, key, value.value),
     )
   }
 })()
