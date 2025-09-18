@@ -233,7 +233,7 @@ const TextType = new (class TextType extends ChildNodeType<'text'> {
     }
   }
 
-  storeJsonValue(
+  override storeJsonValue(
     tx: Transaction,
     parentKey: Key,
     value: JsonValue<'text'>,
