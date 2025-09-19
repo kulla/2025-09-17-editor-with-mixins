@@ -233,10 +233,10 @@ abstract class NonRootTreeNode<T extends TypeName> extends TreeNode<T> {
 
 type Mixin<
   T extends TypeName,
-  F extends typeof FlatNode<T>,
-  F2 extends typeof FlatNode<T>,
-  W extends typeof TreeNode<T>,
-  W2 extends typeof TreeNode<T>,
+  F extends typeof FlatNode<T> = typeof FlatNode<T>,
+  F2 extends typeof FlatNode<T> = typeof FlatNode<T>,
+  W extends typeof TreeNode<T> = typeof TreeNode<T>,
+  W2 extends typeof TreeNode<T> = typeof TreeNode<T>,
 > = (arg: [T, F, W]) => [F2, W2]
 
 class NodeTypeBuilder<
@@ -357,13 +357,7 @@ function WrappedNodeType<
     }
 
     return [WrappedFlatNode, WrappedTreeNode]
-  }) satisfies Mixin<
-    T,
-    typeof FlatNode<T>,
-    typeof FlatNode<T>,
-    typeof TreeNode<T>,
-    typeof TreeNode<T>
-  >
+  }) satisfies Mixin<T>
 }
 
 export const RootType = NodeTypeBuilder.create('root')
