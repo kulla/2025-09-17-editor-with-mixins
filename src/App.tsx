@@ -209,6 +209,12 @@ abstract class FlatNode<T extends TypeName> extends Stateful {
   abstract toJsonValue(): JsonValue<T>
 }
 
+abstract class TreeNode<T extends TypeName> extends Stateful {
+  constructor(public readonly jsonValue: JsonValue<T>) {
+    super()
+  }
+}
+
 abstract class NodeType<T extends TypeName> {
   abstract readonly name: T
 
