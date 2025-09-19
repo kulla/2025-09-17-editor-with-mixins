@@ -27,10 +27,13 @@ function getSingletonYDoc() {
   return ydoc
 }
 
-interface WrappedNodeSpec<T extends TypeName, C extends TypeName, ChildType> {
-  flatValue: Key<C>
-  jsonValue: { type: T; value: JsonValue<C> }
-  childType: ChildType
+interface WrappedNodeSpec<
+  T extends TypeName,
+  C extends { typeName: TypeName } = { typeName: TypeName },
+> {
+  flatValue: Key<C['typeName']>
+  jsonValue: { type: T; value: JsonValue<C['typeName']> }
+  childType: C
 }
 
 interface NodeMap {
@@ -38,7 +41,7 @@ interface NodeMap {
     flatValue: Y.Text
     jsonValue: string
   }
-  root: WrappedNodeSpec<'root', 'text', typeof TextType>
+  root: WrappedNodeSpec<'root', typeof TextType>
 }
 
 type TypeName = keyof NodeMap
@@ -313,9 +316,7 @@ const TextType = NodeTypeBuilder.create('text')
   .finish()
 
 type WrappedNodeTypeName = {
-  [T in TypeName]: NodeMap[T] extends WrappedNodeSpec<T, TypeName, unknown>
-    ? T
-    : never
+  [T in TypeName]: NodeMap[T] extends WrappedNodeSpec<T> ? T : never
 }[TypeName]
 
 function WrappedNode<
