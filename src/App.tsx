@@ -217,20 +217,6 @@ abstract class TreeNode<T extends TypeName> extends Stateful {
   abstract store(this: this & Writable, parentKey: Key | null): Key<T>
 }
 
-abstract class NonRootFlatNode<T extends TypeName> extends FlatNode<T> {
-  override get parentKey(): Key {
-    const parentKey = this.store.getParentKey(this.key)
-
-    invariant(parentKey != null, `Parent key for ${this.key} is null`)
-
-    return parentKey
-  }
-}
-
-abstract class NonRootTreeNode<T extends TypeName> extends TreeNode<T> {
-  abstract store(this: this & Writable, parentKey: Key): Key<T>
-}
-
 type Mixin<
   T extends TypeName,
   F extends typeof FlatNode<T> = typeof FlatNode<T>,
@@ -283,13 +269,9 @@ class NodeTypeBuilder<
   static create<T extends TypeName>(typeName: T) {
     return new NodeTypeBuilder(typeName, FlatNode<T>, TreeNode<T>)
   }
-
-  static createNonRoot<T extends TypeName>(typeName: T) {
-    return new NodeTypeBuilder(typeName, NonRootFlatNode<T>, NonRootTreeNode<T>)
-  }
 }
 
-const TextType = NodeTypeBuilder.createNonRoot('text')
+const TextType = NodeTypeBuilder.create('text')
   .apply(([_, BaseFlatNote, BaseTreeNode]) => {
     class TextFlatNode extends BaseFlatNote {
       override toJsonValue(): JsonValue<'text'> {
@@ -308,6 +290,25 @@ const TextType = NodeTypeBuilder.createNonRoot('text')
     }
 
     return [TextFlatNode, TextTreeNode]
+  })
+  .apply(([_, BaseFlatNode, BaseTreeNode]) => {
+    class NonRootFlatNode extends BaseFlatNode {
+      override get parentKey(): Key {
+        const parentKey = this.store.getParentKey(this.key)
+
+        invariant(parentKey != null, `Parent key for ${this.key} is null`)
+
+        return parentKey
+      }
+    }
+
+    class NonRootTreeNode extends BaseTreeNode {
+      override store(this: this & Writable, parentKey: Key) {
+        return super.store(parentKey)
+      }
+    }
+
+    return [NonRootFlatNode, NonRootTreeNode]
   })
   .finish()
 
