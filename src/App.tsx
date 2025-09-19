@@ -27,10 +27,10 @@ function getSingletonYDoc() {
   return ydoc
 }
 
-interface WrappedNodeSpec<T extends TypeName, C extends TypeName> {
+interface WrappedNodeSpec<T extends TypeName, C extends TypeName, ChildType> {
   flatValue: Key<C>
   jsonValue: { type: T; value: JsonValue<C> }
-  childType: C
+  childType: ChildType
 }
 
 interface NodeMap {
@@ -38,7 +38,7 @@ interface NodeMap {
     flatValue: Y.Text
     jsonValue: string
   }
-  root: WrappedNodeSpec<'root', 'text'>
+  root: WrappedNodeSpec<'root', 'text', typeof TextType>
 }
 
 type TypeName = keyof NodeMap
@@ -181,6 +181,7 @@ abstract class Stateful {
   }
 
   copyStateFrom(other: Stateful & Writable): this & Writable
+  copyStateFrom(other: Stateful): this
   copyStateFrom(other: Stateful): this {
     this.transaction = other.transaction
     return this
@@ -236,7 +237,7 @@ type Mixin<
   F2 extends typeof FlatNode<T>,
   W extends typeof TreeNode<T>,
   W2 extends typeof TreeNode<T>,
-> = (arg: [F, W]) => [F2, W2]
+> = (arg: [T, F, W]) => [F2, W2]
 
 class NodeTypeBuilder<
   T extends TypeName,
@@ -252,7 +253,11 @@ class NodeTypeBuilder<
   apply<F2 extends typeof FlatNode<T>, W2 extends typeof TreeNode<T>>(
     mixin: Mixin<T, F, F2, W, W2>,
   ) {
-    const [NewFlatNode, NewTreeNode] = mixin([this._FlatNode, this._TreeNode])
+    const [NewFlatNode, NewTreeNode] = mixin([
+      this._typeName,
+      this._FlatNode,
+      this._TreeNode,
+    ])
 
     return new NodeTypeBuilder(this._typeName, NewFlatNode, NewTreeNode)
   }
@@ -275,13 +280,17 @@ class NodeTypeBuilder<
     }
   }
 
+  static create<T extends TypeName>(typeName: T) {
+    return new NodeTypeBuilder(typeName, FlatNode<T>, TreeNode<T>)
+  }
+
   static createNonRoot<T extends TypeName>(typeName: T) {
     return new NodeTypeBuilder(typeName, NonRootFlatNode<T>, NonRootTreeNode<T>)
   }
 }
 
 const TextType = NodeTypeBuilder.createNonRoot('text')
-  .apply(([FlatNote, TreeNode]) => {
+  .apply(([_, FlatNote, TreeNode]) => {
     class TextFlatNode extends FlatNote {
       override toJsonValue(): JsonValue<'text'> {
         return this.value.toString()
@@ -303,53 +312,74 @@ const TextType = NodeTypeBuilder.createNonRoot('text')
   .finish()
 
 type WrappedNodeTypeName = {
-  [T in TypeName]: NodeMap[T] extends WrappedNodeSpec<T, TypeName> ? T : never
+  [T in TypeName]: NodeMap[T] extends WrappedNodeSpec<T, TypeName, unknown>
+    ? T
+    : never
 }[TypeName]
 
 function WrappedNodeType<
   T extends WrappedNodeTypeName,
   C extends NodeMap[T]['childType'],
->(typeName: T, childType: ChildNodeType<C>) {
-  return class extends ChildNodeType<T> {
-    override name = typeName
+>(childType: C) {
+  return (([typeName, BaseFlatNode, BaseTreeNode]: [
+    T,
+    typeof FlatNode<T>,
+    typeof TreeNode<T>,
+  ]) => {
+    class WrappedFlatNode extends BaseFlatNode {
+      override toJsonValue(): JsonValue<T> {
+        return { type: typeName, value: this.getChild().toJsonValue() }
+      }
 
-    override get FlatNode() {
-      return class extends FlatNode<T> {
-        override toJsonValue(): JsonValue<T> {
-          const childNode = childType.createFlatNode(
-            this.store,
-            this.value as Key<C>,
-          )
-
-          return { type: typeName, value: childNode.toJsonValue() }
-        }
+      getChild(this: this & Writable): InstanceType<C['FlatNode']> & Writable
+      getChild(): InstanceType<C['FlatNode']>
+      getChild() {
+        return childType
+          .createFlatNode(this.store, this.value)
+          .copyStateFrom(this)
       }
     }
 
-    override storeJsonValue(
-      tx: Transaction,
-      parentKey: Key | null,
-      value: JsonValue<T>,
-    ): Key<T> {
-      return tx.insert(this.name, parentKey, (key) =>
-        childType.storeJsonValue(tx, key, value.value),
-      )
+    class WrappedTreeNode extends BaseTreeNode {
+      override store(this: this & Writable, parentKey: Key | null): Key<T> {
+        return this.transaction.insert(typeName, parentKey, (key) =>
+          this.getChild().store(key),
+        )
+      }
+
+      getChild(this: this & Writable): InstanceType<C['TreeNode']> & Writable
+      getChild(): InstanceType<C['TreeNode']>
+      getChild() {
+        return childType
+          .createTreeNode(this.jsonValue.value)
+          .copyStateFrom(this)
+      }
     }
-  }
+
+    return [WrappedFlatNode, WrappedTreeNode]
+  }) satisfies Mixin<
+    T,
+    typeof FlatNode<T>,
+    typeof FlatNode<T>,
+    typeof TreeNode<T>,
+    typeof TreeNode<T>
+  >
 }
 
-export const RootType = new (class RootType extends WrappedNodeType(
-  'root',
-  TextType,
-) {
-  override get FlatNode() {
-    return class RootNode extends super.FlatNode {
+export const RootType = NodeTypeBuilder.create('root')
+  .apply(WrappedNodeType(TextType))
+  .apply(([_, FlatNode, TreeNode]) => {
+    class RootFlatNode extends FlatNode {
       override get parentKey(): null {
         return null
       }
     }
-  }
-})()
 
-const root = RootType.createFlatNode(new EditorStore(), 'root:1')
-const p = root.parentKey
+    class RootTreeNode extends TreeNode {
+      override store(this: this & Writable): Key<'root'> {
+        return super.store(null)
+      }
+    }
+    return [RootFlatNode, RootTreeNode]
+  })
+  .finish()
