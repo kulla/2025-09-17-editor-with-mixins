@@ -245,32 +245,32 @@ class NodeTypeBuilder<
   W extends typeof TreeNode<T>,
 > {
   constructor(
-    public readonly _typeName: T,
-    public readonly _FlatNode: F,
-    public readonly _TreeNode: W,
+    public readonly typeName: T,
+    public readonly FlatNode: F,
+    public readonly TreeNode: W,
   ) {}
 
   apply<F2 extends typeof FlatNode<T>, W2 extends typeof TreeNode<T>>(
     mixin: Mixin<T, F, F2, W, W2>,
   ) {
     const [NewFlatNode, NewTreeNode] = mixin([
-      this._typeName,
-      this._FlatNode,
-      this._TreeNode,
+      this.typeName,
+      this.FlatNode,
+      this.TreeNode,
     ])
 
-    return new NodeTypeBuilder(this._typeName, NewFlatNode, NewTreeNode)
+    return new NodeTypeBuilder(this.typeName, NewFlatNode, NewTreeNode)
   }
 
   finish(this: {
-    _typeName: T
-    _FlatNode: new (store: EditorStore, key: Key<T>) => InstanceType<F>
-    _TreeNode: new (jsonValue: JsonValue<T>) => InstanceType<W>
+    typeName: T
+    FlatNode: new (store: EditorStore, key: Key<T>) => InstanceType<F>
+    TreeNode: new (jsonValue: JsonValue<T>) => InstanceType<W>
   }) {
     return {
-      typeName: this._typeName,
-      FlatNode: this._FlatNode,
-      TreeNode: this._TreeNode,
+      typeName: this.typeName,
+      FlatNode: this.FlatNode,
+      TreeNode: this.TreeNode,
       createFlatNode(store: EditorStore, key: Key<T>) {
         return new this.FlatNode(store, key)
       },
@@ -290,14 +290,14 @@ class NodeTypeBuilder<
 }
 
 const TextType = NodeTypeBuilder.createNonRoot('text')
-  .apply(([_, FlatNote, TreeNode]) => {
-    class TextFlatNode extends FlatNote {
+  .apply(([_, BaseFlatNote, BaseTreeNode]) => {
+    class TextFlatNode extends BaseFlatNote {
       override toJsonValue(): JsonValue<'text'> {
         return this.value.toString()
       }
     }
 
-    class TextTreeNode extends TreeNode {
+    class TextTreeNode extends BaseTreeNode {
       override store(this: this & Writable, parentKey: Key): Key<'text'> {
         return this.transaction.insert(
           'text',
@@ -317,7 +317,7 @@ type WrappedNodeTypeName = {
     : never
 }[TypeName]
 
-function WrappedNodeType<
+function WrappedNode<
   T extends WrappedNodeTypeName,
   C extends NodeMap[T]['childType'],
 >(childType: C) {
@@ -361,7 +361,7 @@ function WrappedNodeType<
 }
 
 export const RootType = NodeTypeBuilder.create('root')
-  .apply(WrappedNodeType(TextType))
+  .apply(WrappedNode(TextType))
   .apply(([_, BaseFlatNode, BaseTreeNode]) => {
     class RootFlatNode extends BaseFlatNode {
       override get parentKey(): null {
@@ -374,6 +374,7 @@ export const RootType = NodeTypeBuilder.create('root')
         return super.store(null)
       }
     }
+
     return [RootFlatNode, RootTreeNode]
   })
   .finish()
