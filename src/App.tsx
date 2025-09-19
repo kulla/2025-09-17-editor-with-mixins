@@ -323,11 +323,7 @@ function WrappedNode<
   T extends WrappedNodeTypeName,
   C extends NodeMap[T]['childType'],
 >(childType: C) {
-  return (([typeName, BaseFlatNode, BaseTreeNode]: [
-    T,
-    typeof FlatNode<T>,
-    typeof TreeNode<T>,
-  ]) => {
+  return (([typeName, BaseFlatNode, BaseTreeNode]) => {
     class WrappedFlatNode extends BaseFlatNode {
       override toJsonValue(): JsonValue<T> {
         return { type: typeName, value: this.getChild().toJsonValue() }
