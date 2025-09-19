@@ -257,11 +257,21 @@ class NodeTypeBuilder<
     return new NodeTypeBuilder(this._typeName, NewFlatNode, NewTreeNode)
   }
 
-  build() {
+  finish(this: {
+    _typeName: T
+    _FlatNode: new (store: EditorStore, key: Key<T>) => InstanceType<F>
+    _TreeNode: new (jsonValue: JsonValue<T>) => InstanceType<W>
+  }) {
     return {
       typeName: this._typeName,
       FlatNode: this._FlatNode,
       TreeNode: this._TreeNode,
+      createFlatNode(store: EditorStore, key: Key<T>) {
+        return new this.FlatNode(store, key)
+      },
+      createTreeNode(jsonValue: JsonValue<T>) {
+        return new this.TreeNode(jsonValue)
+      },
     }
   }
 
@@ -290,7 +300,7 @@ const TextType = NodeTypeBuilder.createNonRoot('text')
 
     return [TextFlatNode, TextTreeNode]
   })
-  .build()
+  .finish()
 
 type WrappedNodeTypeName = {
   [T in TypeName]: NodeMap[T] extends WrappedNodeSpec<T, TypeName> ? T : never
