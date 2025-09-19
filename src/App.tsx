@@ -180,10 +180,8 @@ abstract class Stateful {
     return this as this & Writable
   }
 
-  copyStateFrom<Other extends Stateful>(
-    other: Other & Writable,
-  ): this & Writable
-  copyStateFrom<Other extends Stateful>(other: Other): this {
+  copyStateFrom(other: Stateful & Writable): this & Writable
+  copyStateFrom(other: Stateful): this {
     this.transaction = other.transaction
     return this
   }
