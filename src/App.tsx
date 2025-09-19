@@ -317,7 +317,7 @@ type WrappedNodeTypeName = {
     : never
 }[TypeName]
 
-function WrappedNodeType<
+function WrappedNode<
   T extends WrappedNodeTypeName,
   C extends NodeMap[T]['childType'],
 >(childType: C) {
@@ -361,7 +361,7 @@ function WrappedNodeType<
 }
 
 export const RootType = NodeTypeBuilder.create('root')
-  .apply(WrappedNodeType(TextType))
+  .apply(WrappedNode(TextType))
   .apply(([_, BaseFlatNode, BaseTreeNode]) => {
     class RootFlatNode extends BaseFlatNode {
       override get parentKey(): null {
