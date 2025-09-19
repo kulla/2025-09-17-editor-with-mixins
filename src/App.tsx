@@ -230,16 +230,13 @@ abstract class NonRootTreeNode<T extends TypeName> extends TreeNode<T> {
   abstract store(this: this & Writable, parentKey: Key): Key<T>
 }
 
-interface Mixin<
+type Mixin<
   T extends TypeName,
   F extends typeof FlatNode<T>,
   F2 extends typeof FlatNode<T>,
   W extends typeof TreeNode<T>,
   W2 extends typeof TreeNode<T>,
-> {
-  changeFlatNode: (Base: F) => F2
-  changeTreeNode: (Base: W) => W2
-}
+> = (arg: [F, W]) => [F2, W2]
 
 class NodeTypeBuilder<
   T extends TypeName,
@@ -252,15 +249,12 @@ class NodeTypeBuilder<
     public readonly _TreeNode: W,
   ) {}
 
-  apply<F2 extends typeof FlatNode<T>, W2 extends typeof TreeNode<T>>({
-    changeFlatNode,
-    changeTreeNode,
-  }: Mixin<T, F, F2, W, W2>) {
-    return new NodeTypeBuilder(
-      this._typeName,
-      changeFlatNode(this._FlatNode),
-      changeTreeNode(this._TreeNode),
-    )
+  apply<F2 extends typeof FlatNode<T>, W2 extends typeof TreeNode<T>>(
+    mixin: Mixin<T, F, F2, W, W2>,
+  ) {
+    const [NewFlatNode, NewTreeNode] = mixin([this._FlatNode, this._TreeNode])
+
+    return new NodeTypeBuilder(this._typeName, NewFlatNode, NewTreeNode)
   }
 
   build() {
@@ -277,23 +271,24 @@ class NodeTypeBuilder<
 }
 
 const TextType = NodeTypeBuilder.createNonRoot('text')
-  .apply({
-    changeFlatNode: (FlatNoteBase) =>
-      class extends FlatNoteBase {
-        override toJsonValue(): JsonValue<'text'> {
-          return this.value.toString()
-        }
-      },
-    changeTreeNode: (TreeNodeBase) =>
-      class extends TreeNodeBase {
-        override store(this: this & Writable, parentKey: Key): Key<'text'> {
-          return this.transaction.insert(
-            'text',
-            parentKey,
-            () => new Y.Text(this.jsonValue),
-          )
-        }
-      },
+  .apply(([FlatNote, TreeNode]) => {
+    class TextFlatNode extends FlatNote {
+      override toJsonValue(): JsonValue<'text'> {
+        return this.value.toString()
+      }
+    }
+
+    class TextTreeNode extends TreeNode {
+      override store(this: this & Writable, parentKey: Key): Key<'text'> {
+        return this.transaction.insert(
+          'text',
+          parentKey,
+          () => new Y.Text(this.jsonValue),
+        )
+      }
+    }
+
+    return [TextFlatNode, TextTreeNode]
   })
   .build()
 
