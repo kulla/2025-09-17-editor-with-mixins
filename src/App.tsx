@@ -169,11 +169,32 @@ class Transaction {
   }
 }
 
-abstract class FlatNode<T extends TypeName> {
+type Writable = { transaction: Transaction }
+
+abstract class Stateful {
+  protected transaction: Transaction | null = null
+
+  toWritable(transaction: Transaction) {
+    this.transaction = transaction
+
+    return this as this & Writable
+  }
+
+  copyStateFrom<Other extends Stateful>(
+    other: Other & Writable,
+  ): this & Writable
+  copyStateFrom<Other extends Stateful>(other: Other): this {
+    this.transaction = other.transaction
+    return this
+  }
+}
+
+abstract class FlatNode<T extends TypeName> extends Stateful {
   constructor(
     protected store: EditorStore,
     public key: Key<T>,
   ) {
+    super()
     invariant(store.has(key), `Key ${key} does not exist in the store`)
   }
 
