@@ -362,14 +362,14 @@ function WrappedNodeType<
 
 export const RootType = NodeTypeBuilder.create('root')
   .apply(WrappedNodeType(TextType))
-  .apply(([_, FlatNode, TreeNode]) => {
-    class RootFlatNode extends FlatNode {
+  .apply(([_, BaseFlatNode, BaseTreeNode]) => {
+    class RootFlatNode extends BaseFlatNode {
       override get parentKey(): null {
         return null
       }
     }
 
-    class RootTreeNode extends TreeNode {
+    class RootTreeNode extends BaseTreeNode {
       override store(this: this & Writable): Key<'root'> {
         return super.store(null)
       }
