@@ -193,6 +193,7 @@ abstract class FlatNode<T extends TypeName> extends Stateful {
     public key: Key<T>,
   ) {
     super()
+
     invariant(store.has(key), `Key ${key} does not exist in the store`)
   }
 
@@ -211,48 +212,90 @@ abstract class TreeNode<T extends TypeName> extends Stateful {
   constructor(public readonly jsonValue: JsonValue<T>) {
     super()
   }
+
+  abstract store(this: this & Writable, parentKey: Key | null): Key<T>
 }
 
-abstract class NodeType<T extends TypeName> {
-  abstract readonly name: T
+abstract class NonRootFlatNode<T extends TypeName> extends FlatNode<T> {
+  override get parentKey(): Key {
+    const parentKey = this.store.getParentKey(this.key)
 
-  abstract get FlatNode(): new (
-    store: EditorStore,
-    key: Key<T>,
-  ) => FlatNode<T>
+    invariant(parentKey != null, `Parent key for ${this.key} is null`)
 
-  createFlatNode(store: EditorStore, key: Key<T>): FlatNode<T> {
-    return new this.FlatNode(store, key)
+    return parentKey
   }
 }
 
-abstract class ChildNodeType<T extends TypeName> extends NodeType<T> {
-  abstract storeJsonValue(
-    tx: Transaction,
-    parentKey: Key,
-    value: JsonValue<T>,
-  ): Key<T>
+abstract class NonRootTreeNode<T extends TypeName> extends TreeNode<T> {
+  abstract store(this: this & Writable, parentKey: Key): Key<T>
 }
 
-const TextType = new (class TextType extends ChildNodeType<'text'> {
-  override name = 'text' as const
+interface Mixin<
+  T extends TypeName,
+  F extends typeof FlatNode<T>,
+  F2 extends typeof FlatNode<T>,
+  W extends typeof TreeNode<T>,
+  W2 extends typeof TreeNode<T>,
+> {
+  changeFlatNode: (Base: F) => F2
+  changeTreeNode: (Base: W) => W2
+}
 
-  override get FlatNode() {
-    return class TextNode extends FlatNode<'text'> {
-      override toJsonValue(): JsonValue<'text'> {
-        return this.value.toString()
-      }
+class NodeTypeBuilder<
+  T extends TypeName,
+  F extends typeof FlatNode<T>,
+  W extends typeof TreeNode<T>,
+> {
+  constructor(
+    public readonly _typeName: T,
+    public readonly _FlatNode: F,
+    public readonly _TreeNode: W,
+  ) {}
+
+  apply<F2 extends typeof FlatNode<T>, W2 extends typeof TreeNode<T>>({
+    changeFlatNode,
+    changeTreeNode,
+  }: Mixin<T, F, F2, W, W2>) {
+    return new NodeTypeBuilder(
+      this._typeName,
+      changeFlatNode(this._FlatNode),
+      changeTreeNode(this._TreeNode),
+    )
+  }
+
+  build() {
+    return {
+      typeName: this._typeName,
+      FlatNode: this._FlatNode,
+      TreeNode: this._TreeNode,
     }
   }
 
-  override storeJsonValue(
-    tx: Transaction,
-    parentKey: Key,
-    value: JsonValue<'text'>,
-  ): Key<'text'> {
-    return tx.insert('text', parentKey, () => new Y.Text(value))
+  static createNonRoot<T extends TypeName>(typeName: T) {
+    return new NodeTypeBuilder(typeName, NonRootFlatNode<T>, NonRootTreeNode<T>)
   }
-})()
+}
+
+const TextType = NodeTypeBuilder.createNonRoot('text')
+  .apply({
+    changeFlatNode: (FlatNoteBase) =>
+      class extends FlatNoteBase {
+        override toJsonValue(): JsonValue<'text'> {
+          return this.value.toString()
+        }
+      },
+    changeTreeNode: (TreeNodeBase) =>
+      class extends TreeNodeBase {
+        override store(this: this & Writable, parentKey: Key): Key<'text'> {
+          return this.transaction.insert(
+            'text',
+            parentKey,
+            () => new Y.Text(this.jsonValue),
+          )
+        }
+      },
+  })
+  .build()
 
 type WrappedNodeTypeName = {
   [T in TypeName]: NodeMap[T] extends WrappedNodeSpec<T, TypeName> ? T : never
