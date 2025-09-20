@@ -88,6 +88,14 @@ export class EditorStore {
     return count
   }
 
+  addUpdateListener(listener: () => void) {
+    this.ydoc.on("update", listener)
+  }
+
+  removeUpdateListener(listener: () => void) {
+    this.ydoc.off("update", listener)
+  }
+
   update(updateFn: (tx: Transaction) => void) {
     if (this.currentTransaction) {
       // If we're already in a transaction, just call the update function directly
