@@ -7,7 +7,7 @@ import { DebugPanel } from './components/debug-panel'
 
 const initialValue: JsonValue<'root'> = {
   type: 'document',
-  document: { type: 'paragraph', value: 'Hello, Rsbuild!' },
+  document: [{ type: 'paragraph', value: 'Hello, Rsbuild!' }],
 }
 const rootKey: Key<'root'> = 'root:0'
 
@@ -73,16 +73,23 @@ interface WrappedNodeSpec<T extends TypeName, C extends TypeName = TypeName> {
   childType: C
 }
 
+interface ArrayNodeSpec<C extends TypeName = TypeName> {
+  flatValue: Key<C>[]
+  jsonValue: JsonValue<C>[]
+  childType: C
+}
+
 interface NodeMap {
   text: {
     flatValue: Y.Text
     jsonValue: string
   }
   root: {
-    flatValue: Key<'paragraph'>
-    jsonValue: { type: 'document'; document: JsonValue<'paragraph'> }
+    flatValue: Key<'content'>
+    jsonValue: { type: 'document'; document: JsonValue<'content'> }
   }
   paragraph: WrappedNodeSpec<'paragraph', 'text'>
+  content: ArrayNodeSpec<'paragraph'>
 }
 
 type TypeName = keyof NodeMap
@@ -493,6 +500,58 @@ const ParagraphType = NodeTypeBuilder.create('paragraph')
   .apply(WrappedNode(TextType))
   .finish()
 
+type ArrayNodeTypeName = {
+  [T in TypeName]: NodeMap[T] extends ArrayNodeSpec ? T : never
+}[TypeName]
+
+function ArrayNode<
+  T extends ArrayNodeTypeName,
+  C extends NonRootNodeType<NodeMap[T]['childType']>,
+>(childType: C) {
+  return (([typeName, BaseFlatNode, BaseTreeNode]) => {
+    class ArrayFlatNode extends BaseFlatNode {
+      override toJsonValue(): JsonValue<T> {
+        return this.value.map((childKey) =>
+          this.create(childType, childKey).toJsonValue(),
+        ) as JsonValue<T>
+      }
+
+      getChildren(
+        this: this & Writable,
+      ): (InstanceType<C['FlatNode']> & Writable)[]
+      getChildren(): InstanceType<C['FlatNode']>[]
+      getChildren() {
+        return this.value.map((child) => this.create(childType, child))
+      }
+    }
+
+    class ArrayTreeNode extends BaseTreeNode {
+      override store(this: this & Writable, parentKey: Key): Key<T> {
+        return this.transaction.insert(
+          typeName,
+          parentKey,
+          (key) =>
+            this.getChildren().map((child) => child.store(key)) as FlatValue<T>,
+        )
+      }
+
+      getChildren(
+        this: this & Writable,
+      ): (InstanceType<C['TreeNode']> & Writable)[]
+      getChildren(): InstanceType<C['TreeNode']>[]
+      getChildren() {
+        return this.jsonValue.map((child) => this.create(childType, child))
+      }
+    }
+
+    return [ArrayFlatNode, ArrayTreeNode]
+  }) satisfies Mixin<T, typeof NonRootFlatNode<T>, typeof NonRootTreeNode<T>>
+}
+
+const ContentType = NodeTypeBuilder.create('content')
+  .apply(ArrayNode(ParagraphType))
+  .finish()
+
 export const RootType = NodeTypeBuilder.create('root')
   .apply(([_, BaseFlatNode, BaseTreeNode]) => {
     class RootFlatNode extends BaseFlatNode {
@@ -501,7 +560,7 @@ export const RootType = NodeTypeBuilder.create('root')
       }
 
       override toJsonValue(): JsonValue<'root'> {
-        const document = this.create(ParagraphType, this.value).toJsonValue()
+        const document = this.create(ContentType, this.value).toJsonValue()
 
         return { type: 'document', document }
       }
@@ -509,7 +568,7 @@ export const RootType = NodeTypeBuilder.create('root')
 
     class RootTreeNode extends BaseTreeNode {
       store(this: this & Writable, rootKey: Key<'root'>): void {
-        const child = this.create(ParagraphType, this.jsonValue.document)
+        const child = this.create(ContentType, this.jsonValue.document)
 
         this.transaction.insertRoot(rootKey, child.store(rootKey))
       }
