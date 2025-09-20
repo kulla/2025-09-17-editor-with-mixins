@@ -1,10 +1,10 @@
 import '@picocss/pico/css/pico.min.css'
 import './App.css'
 import { invariant } from 'es-toolkit'
+import { padStart } from 'es-toolkit/compat'
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 import * as Y from 'yjs'
 import { DebugPanel } from './components/debug-panel'
-import { padStart } from 'es-toolkit/compat'
 
 const initialValue: JsonValue<'root'> = {
   type: 'document',
