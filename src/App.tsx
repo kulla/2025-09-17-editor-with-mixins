@@ -7,7 +7,7 @@ import { DebugPanel } from './components/debug-panel'
 
 const initialValue: JsonValue<'root'> = {
   type: 'document',
-  document: 'Hello, Rsbuild!',
+  document: { type: 'paragraph', value: 'Hello, Rsbuild!' },
 }
 const rootKey: Key<'root'> = 'root:0'
 
@@ -79,9 +79,10 @@ interface NodeMap {
     jsonValue: string
   }
   root: {
-    flatValue: Key<'text'>
-    jsonValue: { type: 'document'; document: JsonValue<'text'> }
+    flatValue: Key<'paragraph'>
+    jsonValue: { type: 'document'; document: JsonValue<'paragraph'> }
   }
+  paragraph: WrappedNodeSpec<'paragraph', 'text'>
 }
 
 type TypeName = keyof NodeMap
@@ -350,9 +351,9 @@ abstract class NonRootTreeNode<T extends TypeName> extends TreeNode<T> {
 type Mixin<
   T extends TypeName,
   F extends typeof FlatNode<T> = typeof FlatNode<T>,
-  F2 extends typeof FlatNode<T> = typeof FlatNode<T>,
   W extends typeof TreeNode<T> = typeof TreeNode<T>,
-  W2 extends typeof TreeNode<T> = typeof TreeNode<T>,
+  F2 extends typeof FlatNode<T> = F,
+  W2 extends typeof TreeNode<T> = W,
 > = (arg: [T, F, W]) => readonly [F2, W2]
 
 class NodeTypeBuilder<
@@ -367,7 +368,7 @@ class NodeTypeBuilder<
   ) {}
 
   apply<F2 extends typeof FlatNode<T>, W2 extends typeof TreeNode<T>>(
-    mixin: Mixin<T, F, F2, W, W2>,
+    mixin: Mixin<T, F, W, F2, W2>,
   ) {
     const [NewFlatNode, NewTreeNode] = mixin([
       this.typeName,
@@ -447,14 +448,14 @@ interface NodeType<
   createTreeNode: (jsonValue: JsonValue<T>) => InstanceType<W>
 }
 
-type NonRootNodeType<
-  T extends Exclude<TypeName, 'root'>,
-  F extends typeof NonRootFlatNode<T> = typeof NonRootFlatNode<T>,
-  W extends typeof NonRootTreeNode<T> = typeof NonRootTreeNode<T>,
-> = NodeType<T, F, W>
+type NonRootNodeType<T extends Exclude<TypeName, 'root'>> = NodeType<
+  T,
+  typeof NonRootFlatNode<T>,
+  typeof NonRootTreeNode<T>
+>
 
-/*function WrappedNode<
-  T extends WrappedNodeTypeName & Exclude<TypeName, 'root'>,
+function WrappedNode<
+  T extends WrappedNodeTypeName,
   C extends NonRootNodeType<NodeMap[T]['childType']>,
 >(childType: C) {
   return (([typeName, BaseFlatNode, BaseTreeNode]) => {
@@ -489,8 +490,12 @@ type NonRootNodeType<
     }
 
     return [WrappedFlatNode, WrappedTreeNode]
-  }) satisfies Mixin<T>
-}*/
+  }) satisfies Mixin<T, typeof NonRootFlatNode<T>, typeof NonRootTreeNode<T>>
+}
+
+const ParagraphType = NodeTypeBuilder.create('paragraph')
+  .apply(WrappedNode(TextType))
+  .finish()
 
 export const RootType = NodeTypeBuilder.create('root')
   .apply(([_, BaseFlatNode, BaseTreeNode]) => {
@@ -500,7 +505,7 @@ export const RootType = NodeTypeBuilder.create('root')
       }
 
       override toJsonValue(): JsonValue<'root'> {
-        const document = this.create(TextType, this.value).toJsonValue()
+        const document = this.create(ParagraphType, this.value).toJsonValue()
 
         return { type: 'document', document }
       }
@@ -508,7 +513,7 @@ export const RootType = NodeTypeBuilder.create('root')
 
     class RootTreeNode extends BaseTreeNode {
       store(this: this & Writable, rootKey: Key<'root'>): void {
-        const child = this.create(TextType, this.jsonValue.document)
+        const child = this.create(ParagraphType, this.jsonValue.document)
 
         this.transaction.insertRoot(rootKey, child.store(rootKey))
       }
