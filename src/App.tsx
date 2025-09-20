@@ -293,11 +293,47 @@ abstract class FlatNode<T extends TypeName> extends Stateful {
   protected getParentKeyFromStore(): Key | null {
     return this.store.getParentKey(this.key)
   }
+
+  protected create<S extends TypeName, F extends typeof FlatNode<S>>(
+    this: this & Writable,
+    ChildType: NodeType<S, F, typeof TreeNode<S>>,
+    childKey: Key<S>,
+  ): InstanceType<F> & Writable
+  protected create<S extends TypeName, F extends typeof FlatNode<S>>(
+    ChildType: NodeType<S, F, typeof TreeNode<S>>,
+    childKey: Key<S>,
+  ): InstanceType<F>
+  protected create<S extends TypeName, F extends typeof FlatNode<S>>(
+    ChildType: NodeType<S, F, typeof TreeNode<S>>,
+    childKey: Key<S>,
+  ): InstanceType<F> {
+    return ChildType.createFlatNode(this.store, childKey).copyStateFrom(this)
+  }
 }
 
 abstract class TreeNode<T extends TypeName> extends Stateful {
   constructor(public readonly jsonValue: JsonValue<T>) {
     super()
+  }
+
+  protected create<
+    S extends TypeName,
+    F extends typeof FlatNode<S>,
+    W extends typeof TreeNode<S>,
+  >(
+    this: this & Writable,
+    ChildType: NodeType<S, F, W>,
+    jsonValue: JsonValue<S>,
+  ): InstanceType<W> & Writable
+  protected create<S extends TypeName, W extends typeof TreeNode<S>>(
+    ChildType: NodeType<S, typeof FlatNode<S>, W>,
+    jsonValue: JsonValue<S>,
+  ): InstanceType<W>
+  protected create<S extends TypeName, W extends typeof TreeNode<S>>(
+    ChildType: NodeType<S, typeof FlatNode<S>, W>,
+    jsonValue: JsonValue<S>,
+  ): InstanceType<W> {
+    return ChildType.createTreeNode(jsonValue).copyStateFrom(this)
   }
 }
 
@@ -468,10 +504,7 @@ export const RootType = NodeTypeBuilder.create('root')
       }
 
       override toJsonValue(): JsonValue<'root'> {
-        const document = TextType.createFlatNode(
-          this.store,
-          this.value,
-        ).toJsonValue()
+        const document = this.create(TextType, this.value).toJsonValue()
 
         return { type: 'document', document }
       }
@@ -479,12 +512,13 @@ export const RootType = NodeTypeBuilder.create('root')
 
     class RootTreeNode extends BaseTreeNode {
       store(this: this & Writable, rootKey: Key<'root'>): void {
-        this.transaction.insertRoot(
-          rootKey,
-          TextType.createTreeNode(this.jsonValue.document)
-            .toWritable(this.transaction)
-            .store(rootKey),
-        )
+        const value = this.create<
+          'text',
+          (typeof TextType)['FlatNode'],
+          (typeof TextType)['TreeNode']
+        >(TextType, this.jsonValue.document).store(rootKey)
+
+        this.transaction.insertRoot(rootKey, value)
       }
     }
 
