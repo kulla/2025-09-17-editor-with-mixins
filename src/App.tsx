@@ -16,13 +16,13 @@ export default function App() {
 
   useEffect(() => {
     setTimeout(() => {
-      if (rootKey.current == null || !store.has(rootKey.current)) {
-        store.update((transaction) => {
-          rootKey.current = RootType.createTreeNode(initialValue)
-            .toWritable(transaction)
-            .store()
-        })
-      }
+      if (rootKey.current != null && store.has(rootKey.current)) return
+
+      store.update((transaction) => {
+        rootKey.current = RootType.createTreeNode(initialValue)
+          .toWritable(transaction)
+          .store()
+      })
     }, 1000)
   }, [store])
 
