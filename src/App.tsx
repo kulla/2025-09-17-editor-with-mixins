@@ -294,13 +294,13 @@ abstract class FlatNode<T extends TypeName> extends Stateful {
     return this.store.getParentKey(this.key)
   }
 
-  protected create<S extends TypeName, F extends typeof FlatNode<S>>(
+  protected create<S extends TypeName, F extends typeof NonRootFlatNode<S>>(
     this: this & Writable,
-    ChildType: NodeType<S, F, typeof TreeNode<S>>,
+    ChildType: NodeType<S, F, typeof NonRootTreeNode<S>>,
     childKey: Key<S>,
   ): InstanceType<F> & Writable
-  protected create<S extends TypeName, F extends typeof FlatNode<S>>(
-    ChildType: NodeType<S, F, typeof TreeNode<S>>,
+  protected create<S extends TypeName, F extends typeof NonRootFlatNode<S>>(
+    ChildType: NodeType<S, F, typeof NonRootTreeNode<S>>,
     childKey: Key<S>,
   ): InstanceType<F>
   protected create<S extends TypeName, F extends typeof FlatNode<S>>(
@@ -316,16 +316,12 @@ abstract class TreeNode<T extends TypeName> extends Stateful {
     super()
   }
 
-  protected create<
-    S extends TypeName,
-    F extends typeof FlatNode<S>,
-    W extends typeof TreeNode<S>,
-  >(
+  protected create<S extends TypeName, W extends typeof NonRootTreeNode<S>>(
     this: this & Writable,
-    ChildType: NodeType<S, F, W>,
+    ChildType: NodeType<S, typeof FlatNode<S>, W>,
     jsonValue: JsonValue<S>,
   ): InstanceType<W> & Writable
-  protected create<S extends TypeName, W extends typeof TreeNode<S>>(
+  protected create<S extends TypeName, W extends typeof NonRootTreeNode<S>>(
     ChildType: NodeType<S, typeof FlatNode<S>, W>,
     jsonValue: JsonValue<S>,
   ): InstanceType<W>
@@ -512,13 +508,9 @@ export const RootType = NodeTypeBuilder.create('root')
 
     class RootTreeNode extends BaseTreeNode {
       store(this: this & Writable, rootKey: Key<'root'>): void {
-        const value = this.create<
-          'text',
-          (typeof TextType)['FlatNode'],
-          (typeof TextType)['TreeNode']
-        >(TextType, this.jsonValue.document).store(rootKey)
+        const child = this.create(TextType, this.jsonValue.document)
 
-        this.transaction.insertRoot(rootKey, value)
+        this.transaction.insertRoot(rootKey, child.store(rootKey))
       }
     }
 
