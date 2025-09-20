@@ -214,26 +214,7 @@ abstract class TreeNode<T extends TypeName> extends Stateful {
     super()
   }
 
-  protected abstract storeWithKey(
-    this: this & Writable,
-    parentKey: Key | null,
-  ): Key<T>
-}
-
-abstract class NonRootFlatNode<T extends TypeName> extends FlatNode<T> {
-  get parentKey() {
-    const parentKey = this.getParentKeyFromStore()
-
-    invariant(parentKey != null, `Parent key for ${this.key} is null`)
-
-    return parentKey
-  }
-}
-
-abstract class NonRootTreeNode<T extends TypeName> extends TreeNode<T> {
-  store(this: this & Writable, parentKey: Key) {
-    return this.storeWithKey(parentKey)
-  }
+  abstract store(this: this & Writable, parentKey: Key | null): Key<T>
 }
 
 type Mixin<
@@ -285,16 +266,12 @@ class NodeTypeBuilder<
     }
   }
 
-  static createNonRoot<T extends TypeName>(typeName: T) {
-    return new NodeTypeBuilder(typeName, NonRootFlatNode<T>, NonRootTreeNode<T>)
-  }
-
   static create<T extends TypeName>(typeName: T) {
     return new NodeTypeBuilder(typeName, FlatNode<T>, TreeNode<T>)
   }
 }
 
-const TextType = NodeTypeBuilder.createNonRoot('text')
+const TextType = NodeTypeBuilder.create('text')
   .apply(([_, BaseFlatNote, BaseTreeNode]) => {
     class TextFlatNode extends BaseFlatNote {
       override toJsonValue(): JsonValue<'text'> {
@@ -303,7 +280,7 @@ const TextType = NodeTypeBuilder.createNonRoot('text')
     }
 
     class TextTreeNode extends BaseTreeNode {
-      override storeWithKey(
+      override store(
         this: this & Writable,
         parentKey: Key | null,
       ): Key<'text'> {
@@ -323,10 +300,10 @@ type WrappedNodeTypeName = {
   [T in TypeName]: NodeMap[T] extends WrappedNodeSpec<T> ? T : never
 }[TypeName]
 
-interface NodeTypeDefinition<
+interface NodeType<
   T extends TypeName,
-  F extends typeof FlatNode<T>,
-  W extends typeof TreeNode<T>,
+  F extends typeof FlatNode<T> = typeof FlatNode<T>,
+  W extends typeof TreeNode<T> = typeof TreeNode<T>,
 > {
   typeName: T
   FlatNode: new (store: EditorStore, key: Key<T>) => InstanceType<F>
@@ -335,15 +312,9 @@ interface NodeTypeDefinition<
   createTreeNode: (jsonValue: JsonValue<T>) => InstanceType<W>
 }
 
-type NonRootType<T extends TypeName> = NodeTypeDefinition<
-  T,
-  typeof NonRootFlatNode<T>,
-  typeof NonRootTreeNode<T>
->
-
 function WrappedNode<
   T extends WrappedNodeTypeName,
-  C extends NonRootType<NodeMap[T]['childType']>,
+  C extends NodeType<NodeMap[T]['childType']>,
 >(childType: C) {
   return (([typeName, BaseFlatNode, BaseTreeNode]) => {
     class WrappedFlatNode extends BaseFlatNode {
@@ -361,10 +332,7 @@ function WrappedNode<
     }
 
     class WrappedTreeNode extends BaseTreeNode {
-      override storeWithKey(
-        this: this & Writable,
-        parentKey: Key | null,
-      ): Key<T> {
+      override store(this: this & Writable, parentKey: Key | null): Key<T> {
         return this.transaction.insert(typeName, parentKey, (key) =>
           this.getChild().store(key),
         )
@@ -394,7 +362,7 @@ export const RootType = NodeTypeBuilder.create('root')
 
     class RootTreeNode extends BaseTreeNode {
       store(this: this & Writable): Key<'root'> {
-        return this.storeWithKey(null)
+        return super.store(null)
       }
     }
 
