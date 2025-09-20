@@ -3,6 +3,7 @@ import './App.css'
 import { invariant } from 'es-toolkit'
 import * as Y from 'yjs'
 import { DebugPanel } from './components/debug-panel'
+import { useRef, useSyncExternalStore } from 'react'
 
 export default function App() {
   return (
@@ -47,9 +48,9 @@ type FlatValue<T extends TypeName = TypeName> = NodeMap[T]['flatValue']
 type JsonValue<T extends TypeName> = NodeMap[T]['jsonValue']
 
 export class EditorStore {
-  protected values: Y.Map<FlatValue>
-  protected parentKeys: Y.Map<Key | null>
-  protected state: Y.Map<unknown>
+  protected readonly values: Y.Map<FlatValue>
+  protected readonly parentKeys: Y.Map<Key | null>
+  protected readonly state: Y.Map<unknown>
   private lastKeyNumber = 0
   private currentTransaction: Transaction | null = null
 
@@ -127,6 +128,28 @@ export class EditorStore {
 
     return `${typeName}:${this.lastKeyNumber}`
   }
+}
+
+export function useEditorState() {
+  const state = useRef(new EditorStore()).current
+  const lastReturn = useRef({ state, updateCount: state.updateCount })
+
+  return useSyncExternalStore(
+    (listener) => {
+      state.addUpdateListener(listener)
+
+      return () => state.removeUpdateListener(listener)
+    },
+    () => {
+      if (lastReturn.current.updateCount === state.updateCount) {
+        return lastReturn.current
+      }
+
+      lastReturn.current = { state, updateCount: state.updateCount }
+
+      return lastReturn.current
+    },
+  )
 }
 
 class Transaction {
