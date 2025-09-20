@@ -31,15 +31,30 @@ export default function App() {
       <h1>Rsbuild with React</h1>
       <p>Start building amazing things with Rsbuild.</p>
       <DebugPanel
-        labels={{ entries: 'Internal editor store' }}
+        labels={{
+          entries: 'Internal editor store',
+          json: 'JSON representation',
+        }}
         getCurrentValue={{
           entries: () =>
             store
               .getValueEntries()
               .map(([key, entry]) => `${key}: ${JSON.stringify(entry)}`)
               .join('\n'),
+          json: () => {
+            if (rootKey.current == null || !store.has(rootKey.current)) {
+              return 'No root node'
+            }
+
+            const jsonValue = RootType.createFlatNode(
+              store,
+              rootKey.current,
+            ).toJsonValue()
+
+            return JSON.stringify(jsonValue, null, 2)
+          },
         }}
-        showOnStartup={{ entries: true }}
+        showOnStartup={{ entries: true, json: true }}
       />
     </main>
   )
