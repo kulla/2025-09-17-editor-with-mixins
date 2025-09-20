@@ -467,9 +467,7 @@ function WrappedNode<
       getChild(this: this & Writable): InstanceType<C['FlatNode']> & Writable
       getChild(): InstanceType<C['FlatNode']>
       getChild() {
-        return childType
-          .createFlatNode(this.store, this.value)
-          .copyStateFrom(this)
+        return this.create(childType, this.value)
       }
     }
 
@@ -483,9 +481,7 @@ function WrappedNode<
       getChild(this: this & Writable): InstanceType<C['TreeNode']> & Writable
       getChild(): InstanceType<C['TreeNode']>
       getChild() {
-        return childType
-          .createTreeNode(this.jsonValue.value)
-          .copyStateFrom(this)
+        return this.create(childType, this.jsonValue.value)
       }
     }
 
