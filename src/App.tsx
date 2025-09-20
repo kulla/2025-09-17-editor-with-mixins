@@ -4,6 +4,7 @@ import { invariant } from 'es-toolkit'
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 import * as Y from 'yjs'
 import { DebugPanel } from './components/debug-panel'
+import { padStart } from 'es-toolkit/compat'
 
 const initialValue: JsonValue<'root'> = {
   type: 'document',
@@ -39,7 +40,10 @@ export default function App() {
           entries: () =>
             store
               .getValueEntries()
-              .map(([key, entry]) => `${key}: ${JSON.stringify(entry)}`)
+              .map(
+                ([key, entry]) =>
+                  `${padStart(key, 11)}: ${JSON.stringify(entry)}`,
+              )
               .join('\n'),
           json: () => {
             if (!store.has(rootKey)) return ''
