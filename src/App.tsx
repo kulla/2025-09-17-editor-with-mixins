@@ -6,22 +6,22 @@ import * as Y from 'yjs'
 import { DebugPanel } from './components/debug-panel'
 
 const initialValue: JsonValue<'root'> = {
-  type: 'root',
-  value: 'Hello, Rsbuild!',
+  type: 'document',
+  document: 'Hello, Rsbuild!',
 }
+const rootKey: Key<'root'> = 'root:0'
 
 export default function App() {
   const { store } = useEditorStore()
-  const rootKey = useRef<Key<'root'> | null>(null)
 
   useEffect(() => {
     setTimeout(() => {
-      if (rootKey.current != null && store.has(rootKey.current)) return
+      if (store.has(rootKey)) return
 
       store.update((transaction) => {
-        rootKey.current = RootType.createTreeNode(initialValue)
+        RootType.createTreeNode(initialValue)
           .toWritable(transaction)
-          .store()
+          .store(rootKey)
       })
     }, 1000)
   }, [store])
@@ -42,13 +42,11 @@ export default function App() {
               .map(([key, entry]) => `${key}: ${JSON.stringify(entry)}`)
               .join('\n'),
           json: () => {
-            if (rootKey.current == null || !store.has(rootKey.current)) {
-              return 'No root node'
-            }
+            if (!store.has(rootKey)) return ''
 
             const jsonValue = RootType.createFlatNode(
               store,
-              rootKey.current,
+              rootKey,
             ).toJsonValue()
 
             return JSON.stringify(jsonValue, null, 2)
@@ -80,7 +78,10 @@ interface NodeMap {
     flatValue: Y.Text
     jsonValue: string
   }
-  root: WrappedNodeSpec<'root', 'text'>
+  root: {
+    flatValue: Key<'text'>
+    jsonValue: { type: 'document'; document: JsonValue<'text'> }
+  }
 }
 
 type TypeName = keyof NodeMap
@@ -146,6 +147,7 @@ export class EditorStore {
       this.ydoc.transact(() => {
         this.currentTransaction = new Transaction(
           (key) => this.getValue(key),
+          (key) => this.has(key),
           (key, value) => this.setValue(key, value),
           (key, parentKey) => this.setParentKey(key, parentKey),
           (type) => this.generateKey(type),
@@ -206,6 +208,7 @@ class Transaction {
     private readonly getValue: <T extends TypeName>(
       key: Key<T>,
     ) => FlatValue<T>,
+    private readonly has: <T extends TypeName>(key: Key<T>) => boolean,
     private readonly setValue: <T extends TypeName>(
       key: Key<T>,
       value: FlatValue<T>,
@@ -228,9 +231,18 @@ class Transaction {
     this.setValue(key, newValue)
   }
 
-  insert<T extends TypeName>(
+  insertRoot(rootKey: Key<'root'>, value: FlatValue<'root'>) {
+    invariant(
+      !this.has(rootKey),
+      'Root node already exists. Only one root node is allowed.',
+    )
+
+    this.setValue(rootKey, value)
+  }
+
+  insert<T extends Exclude<TypeName, 'Root'>>(
     typeName: T,
-    parentKey: Key | null,
+    parentKey: Key,
     createValue: (key: Key<T>) => FlatValue<T>,
   ): Key<T> {
     const key = this.generateKey(typeName)
@@ -287,8 +299,20 @@ abstract class TreeNode<T extends TypeName> extends Stateful {
   constructor(public readonly jsonValue: JsonValue<T>) {
     super()
   }
+}
 
-  abstract store(this: this & Writable, parentKey: Key | null): Key<T>
+abstract class NonRootFlatNode<T extends TypeName> extends FlatNode<T> {
+  get parentKey(): Key {
+    const parentKey = this.getParentKeyFromStore()
+
+    invariant(parentKey != null, `Node ${this.key} has no parent`)
+
+    return parentKey
+  }
+}
+
+abstract class NonRootTreeNode<T extends TypeName> extends TreeNode<T> {
+  abstract store(this: this & Writable, parentKey: Key): Key<T>
 }
 
 type Mixin<
@@ -340,8 +364,16 @@ class NodeTypeBuilder<
     }
   }
 
+  static create(
+    typeName: 'root',
+  ): NodeTypeBuilder<'root', typeof FlatNode<'root'>, typeof TreeNode<'root'>>
+  static create<T extends Exclude<TypeName, 'root'>>(
+    typeName: T,
+  ): NodeTypeBuilder<T, typeof NonRootFlatNode<T>, typeof NonRootTreeNode<T>>
   static create<T extends TypeName>(typeName: T) {
-    return new NodeTypeBuilder(typeName, FlatNode<T>, TreeNode<T>)
+    return typeName === 'root'
+      ? new NodeTypeBuilder(typeName, FlatNode<T>, TreeNode<T>)
+      : new NodeTypeBuilder(typeName, NonRootFlatNode<T>, NonRootTreeNode<T>)
   }
 }
 
@@ -354,10 +386,7 @@ const TextType = NodeTypeBuilder.create('text')
     }
 
     class TextTreeNode extends BaseTreeNode {
-      override store(
-        this: this & Writable,
-        parentKey: Key | null,
-      ): Key<'text'> {
+      override store(this: this & Writable, parentKey: Key): Key<'text'> {
         return this.transaction.insert(
           'text',
           parentKey,
@@ -386,9 +415,15 @@ interface NodeType<
   createTreeNode: (jsonValue: JsonValue<T>) => InstanceType<W>
 }
 
-function WrappedNode<
-  T extends WrappedNodeTypeName,
-  C extends NodeType<NodeMap[T]['childType']>,
+type NonRootNodeType<
+  T extends Exclude<TypeName, 'root'>,
+  F extends typeof NonRootFlatNode<T> = typeof NonRootFlatNode<T>,
+  W extends typeof NonRootTreeNode<T> = typeof NonRootTreeNode<T>,
+> = NodeType<T, F, W>
+
+/*function WrappedNode<
+  T extends WrappedNodeTypeName & Exclude<TypeName, 'root'>,
+  C extends NonRootNodeType<NodeMap[T]['childType']>,
 >(childType: C) {
   return (([typeName, BaseFlatNode, BaseTreeNode]) => {
     class WrappedFlatNode extends BaseFlatNode {
@@ -406,7 +441,7 @@ function WrappedNode<
     }
 
     class WrappedTreeNode extends BaseTreeNode {
-      override store(this: this & Writable, parentKey: Key | null): Key<T> {
+      override store(this: this & Writable, parentKey: Key): Key<T> {
         return this.transaction.insert(typeName, parentKey, (key) =>
           this.getChild().store(key),
         )
@@ -423,20 +458,33 @@ function WrappedNode<
 
     return [WrappedFlatNode, WrappedTreeNode]
   }) satisfies Mixin<T>
-}
+}*/
 
 export const RootType = NodeTypeBuilder.create('root')
-  .apply(WrappedNode(TextType))
   .apply(([_, BaseFlatNode, BaseTreeNode]) => {
     class RootFlatNode extends BaseFlatNode {
       get parentKey(): null {
         return null
       }
+
+      override toJsonValue(): JsonValue<'root'> {
+        const document = TextType.createFlatNode(
+          this.store,
+          this.value,
+        ).toJsonValue()
+
+        return { type: 'document', document }
+      }
     }
 
     class RootTreeNode extends BaseTreeNode {
-      store(this: this & Writable): Key<'root'> {
-        return super.store(null)
+      store(this: this & Writable, rootKey: Key<'root'>): void {
+        this.transaction.insertRoot(
+          rootKey,
+          TextType.createTreeNode(this.jsonValue.document)
+            .toWritable(this.transaction)
+            .store(rootKey),
+        )
       }
     }
 
