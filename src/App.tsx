@@ -1,19 +1,45 @@
 import '@picocss/pico/css/pico.min.css'
 import './App.css'
 import { invariant } from 'es-toolkit'
+import { useEffect, useRef, useSyncExternalStore } from 'react'
 import * as Y from 'yjs'
 import { DebugPanel } from './components/debug-panel'
-import { useRef, useSyncExternalStore } from 'react'
+
+const initialValue: JsonValue<'root'> = {
+  type: 'root',
+  value: 'Hello, Rsbuild!',
+}
 
 export default function App() {
+  const { store } = useEditorStore()
+  const rootKey = useRef<Key<'root'> | null>(null)
+
+  useEffect(() => {
+    setTimeout(() => {
+      if (rootKey.current == null || !store.has(rootKey.current)) {
+        store.update((transaction) => {
+          rootKey.current = RootType.createTreeNode(initialValue)
+            .toWritable(transaction)
+            .store()
+        })
+      }
+    }, 1000)
+  }, [store])
+
   return (
     <main className="p-10">
       <h1>Rsbuild with React</h1>
       <p>Start building amazing things with Rsbuild.</p>
       <DebugPanel
-        labels={{ example: 'Example' }}
-        getCurrentValue={{ example: () => 'Hello World!' }}
-        showOnStartup={{ example: true }}
+        labels={{ entries: 'Internal editor store' }}
+        getCurrentValue={{
+          entries: () =>
+            store
+              .getValueEntries()
+              .map(([key, entry]) => `${key}: ${JSON.stringify(entry)}`)
+              .join('\n'),
+        }}
+        showOnStartup={{ entries: true }}
       />
     </main>
   )
@@ -76,7 +102,7 @@ export class EditorStore {
     return this.values.has(key)
   }
 
-  getValueEntires() {
+  getValueEntries() {
     return Array.from(this.values.entries())
   }
 
@@ -89,11 +115,11 @@ export class EditorStore {
   }
 
   addUpdateListener(listener: () => void) {
-    this.ydoc.on("update", listener)
+    this.ydoc.on('update', listener)
   }
 
   removeUpdateListener(listener: () => void) {
-    this.ydoc.off("update", listener)
+    this.ydoc.off('update', listener)
   }
 
   update(updateFn: (tx: Transaction) => void) {
@@ -138,22 +164,22 @@ export class EditorStore {
   }
 }
 
-export function useEditorState() {
-  const state = useRef(new EditorStore()).current
-  const lastReturn = useRef({ state, updateCount: state.updateCount })
+export function useEditorStore() {
+  const store = useRef(new EditorStore()).current
+  const lastReturn = useRef({ store, updateCount: store.updateCount })
 
   return useSyncExternalStore(
     (listener) => {
-      state.addUpdateListener(listener)
+      store.addUpdateListener(listener)
 
-      return () => state.removeUpdateListener(listener)
+      return () => store.removeUpdateListener(listener)
     },
     () => {
-      if (lastReturn.current.updateCount === state.updateCount) {
+      if (lastReturn.current.updateCount === store.updateCount) {
         return lastReturn.current
       }
 
-      lastReturn.current = { state, updateCount: state.updateCount }
+      lastReturn.current = { store, updateCount: store.updateCount }
 
       return lastReturn.current
     },
