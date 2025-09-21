@@ -15,35 +15,19 @@ function getSingletonYDoc() {
   return ydoc
 }
 
-interface WrappedNodeSpec<T extends TypeName, C extends TypeName = TypeName> {
-  flatValue: Key<C>
-  jsonValue: { type: T; value: JsonValue<C> }
-  childType: C
-}
+type NonRootKey<T extends string = string> = `${T}:${number}`
+type RootKey = 'root'
+type Key = RootKey | NonRootKey
 
-interface ArrayNodeSpec<C extends TypeName = TypeName> {
-  flatValue: Key<C>[]
-  jsonValue: JsonValue<C>[]
-  childType: C
-}
+type PrimitiveValue = string | number | boolean
+type FlatValue =
+  | PrimitiveValue
+  | Y.Text
+  | NonRootKey
+  | NonRootKey[]
+  | Record<string, NonRootKey>
 
-interface NodeMap {
-  text: {
-    flatValue: Y.Text
-    jsonValue: string
-  }
-  root: {
-    flatValue: Key<'content'>
-    jsonValue: { type: 'document'; document: JsonValue<'content'> }
-  }
-  paragraph: WrappedNodeSpec<'paragraph', 'text'>
-  content: ArrayNodeSpec<'paragraph'>
-}
-
-type TypeName = keyof NodeMap
-type Key<T extends TypeName = TypeName> = `${T}:${number}`
-type FlatValue<T extends TypeName = TypeName> = NodeMap[T]['flatValue']
-type JsonValue<T extends TypeName> = NodeMap[T]['jsonValue']
+type StoredKey<K extends Key, F extends FlatValue> = K & { __StoredType__: F }
 
 export class EditorStore {
   protected readonly values: Y.Map<FlatValue>
@@ -58,19 +42,19 @@ export class EditorStore {
     this.state = ydoc.getMap('state')
   }
 
-  getValue<T extends TypeName>(key: Key<T>): FlatValue<T> {
+  getValue<F extends FlatValue>(key: StoredKey<Key, F>): F {
     const value = this.values.get(key)
 
     invariant(value != null, `Value for key ${key} not found`)
 
-    return value
+    return value as F
   }
 
-  getParentKey<T extends TypeName>(key: Key<T>): Key | null {
+  getParentKey(key: Key): Key | null {
     return this.parentKeys.get(key) ?? null
   }
 
-  has<T extends TypeName>(key: Key<T>): boolean {
+  has(key: Key): boolean {
     return this.values.has(key)
   }
 
@@ -104,7 +88,7 @@ export class EditorStore {
         this.currentTransaction = new Transaction(
           (key) => this.getValue(key),
           (key) => this.has(key),
-          (key, value) => this.setValue(key, value),
+          (key, value) => this.storeValue(key, value),
           (key, parentKey) => this.setParentKey(key, parentKey),
           (type) => this.generateKey(type),
         )
@@ -122,15 +106,20 @@ export class EditorStore {
     this.state.set('updateCount', this.updateCount + 1)
   }
 
-  private setValue<T extends TypeName>(key: Key<T>, value: FlatValue<T>) {
+  private storeValue<K extends Key, F extends FlatValue>(
+    key: K,
+    value: F,
+  ): StoredKey<K, F> {
     this.values.set(key, value)
+
+    return key as StoredKey<K, F>
   }
 
-  private setParentKey<T extends TypeName>(key: Key<T>, parentKey: Key | null) {
+  private setParentKey(key: NonRootKey, parentKey: Key | null) {
     this.parentKeys.set(key, parentKey)
   }
 
-  private generateKey<T extends TypeName>(typeName: T): Key<T> {
+  private generateKey<T extends string>(typeName: T): NonRootKey<T> {
     this.lastKeyNumber += 1
 
     return `${typeName}:${this.lastKeyNumber}`
@@ -161,53 +150,54 @@ export function useEditorStore() {
 
 class Transaction {
   constructor(
-    private readonly getValue: <T extends TypeName>(
-      key: Key<T>,
-    ) => FlatValue<T>,
-    private readonly has: <T extends TypeName>(key: Key<T>) => boolean,
-    private readonly setValue: <T extends TypeName>(
-      key: Key<T>,
-      value: FlatValue<T>,
-    ) => void,
-    private readonly setParentKey: <T extends TypeName>(
-      key: Key<T>,
-      parentKey: Key | null,
-    ) => void,
-    private readonly generateKey: <T extends TypeName>(typeName: T) => Key<T>,
+    private readonly getValue: <F extends FlatValue>(
+      key: StoredKey<Key, F>,
+    ) => F,
+    private readonly has: (key: Key) => boolean,
+    private readonly storeValue: <K extends Key, F extends FlatValue>(
+      key: Key,
+      value: F,
+    ) => StoredKey<K, F>,
+    private readonly setParentKey: (key: Key, parentKey: Key | null) => void,
+    private readonly generateKey: <T extends string>(
+      typeName: T,
+    ) => NonRootKey<T>,
   ) {}
 
-  update<T extends TypeName>(
-    key: Key<T>,
-    updateFn: FlatValue<T> | ((current: FlatValue<T>) => FlatValue<T>),
+  update<F extends FlatValue>(
+    key: StoredKey<Key, F>,
+    updateFn: F | ((current: F) => F),
   ) {
     const currentValue = this.getValue(key)
     const newValue =
       typeof updateFn === 'function' ? updateFn(currentValue) : updateFn
 
-    this.setValue(key, newValue)
+    this.storeValue(key, newValue)
   }
 
-  insertRoot(rootKey: Key<'root'>, value: FlatValue<'root'>) {
+  insertRoot(
+    rootKey: RootKey,
+    value: NonRootKey,
+  ): StoredKey<RootKey, NonRootKey> {
     invariant(
       !this.has(rootKey),
       'Root node already exists. Only one root node is allowed.',
     )
 
-    this.setValue(rootKey, value)
+    return this.storeValue(rootKey, value)
   }
 
-  insert<T extends Exclude<TypeName, 'Root'>>(
+  insert<T extends string, F extends FlatValue>(
     typeName: T,
     parentKey: Key,
-    createValue: (key: Key<T>) => FlatValue<T>,
-  ): Key<T> {
+    createValue: (key: NonRootKey<T>) => F,
+  ): StoredKey<NonRootKey<T>, F> {
     const key = this.generateKey(typeName)
     const value = createValue(key)
 
-    this.setValue(key, value)
     this.setParentKey(key, parentKey)
 
-    return key
+    return this.storeValue(key, value)
   }
 }
 
@@ -230,97 +220,87 @@ abstract class Stateful {
   }
 }
 
-abstract class FlatNode<T extends TypeName> extends Stateful {
+interface NodeSpec {
+  TypeName: string | null
+  Key: Key
+  FlatValue: FlatValue
+  JSONValue: Record<string, unknown> | unknown[] | PrimitiveValue
+}
+
+abstract class FlatNode<S extends NodeSpec> extends Stateful {
   constructor(
     protected store: EditorStore,
-    public key: Key<T>,
+    public key: StoredKey<S['Key'], S['FlatValue']>,
   ) {
     super()
 
     invariant(store.has(key), `Key ${key} does not exist in the store`)
   }
 
-  get value(): FlatValue<T> {
+  get value(): S['FlatValue'] {
     return this.store.getValue(this.key)
   }
 
-  abstract toJsonValue(): JsonValue<T>
+  abstract toJsonValue(): S['JSONValue']
 
   protected getParentKeyFromStore(): Key | null {
     return this.store.getParentKey(this.key)
   }
-
-  protected create<S extends TypeName, F extends typeof NonRootFlatNode<S>>(
-    this: this & Writable,
-    ChildType: NodeType<S, F, typeof NonRootTreeNode<S>>,
-    childKey: Key<S>,
-  ): InstanceType<F> & Writable
-  protected create<S extends TypeName, F extends typeof NonRootFlatNode<S>>(
-    ChildType: NodeType<S, F, typeof NonRootTreeNode<S>>,
-    childKey: Key<S>,
-  ): InstanceType<F>
-  protected create<S extends TypeName, F extends typeof FlatNode<S>>(
-    ChildType: NodeType<S, F, typeof TreeNode<S>>,
-    childKey: Key<S>,
-  ): InstanceType<F> {
-    return ChildType.createFlatNode(this.store, childKey).copyStateFrom(this)
-  }
 }
 
-abstract class TreeNode<T extends TypeName> extends Stateful {
-  constructor(public readonly jsonValue: JsonValue<T>) {
+abstract class TreeNode<S extends NodeSpec> extends Stateful {
+  constructor(public readonly jsonValue: S['JSONValue']) {
     super()
   }
-
-  protected create<S extends TypeName, W extends typeof NonRootTreeNode<S>>(
-    this: this & Writable,
-    ChildType: NodeType<S, typeof FlatNode<S>, W>,
-    jsonValue: JsonValue<S>,
-  ): InstanceType<W> & Writable
-  protected create<S extends TypeName, W extends typeof NonRootTreeNode<S>>(
-    ChildType: NodeType<S, typeof FlatNode<S>, W>,
-    jsonValue: JsonValue<S>,
-  ): InstanceType<W>
-  protected create<S extends TypeName, W extends typeof TreeNode<S>>(
-    ChildType: NodeType<S, typeof FlatNode<S>, W>,
-    jsonValue: JsonValue<S>,
-  ): InstanceType<W> {
-    return ChildType.createTreeNode(jsonValue).copyStateFrom(this)
-  }
 }
 
-abstract class NonRootFlatNode<T extends TypeName> extends FlatNode<T> {
-  get parentKey(): Key {
-    const parentKey = this.getParentKeyFromStore()
-
-    invariant(parentKey != null, `Node ${this.key} has no parent`)
-
-    return parentKey
-  }
-}
-
-abstract class NonRootTreeNode<T extends TypeName> extends TreeNode<T> {
-  abstract store(this: this & Writable, parentKey: Key): Key<T>
-}
-
-type Mixin<
-  T extends TypeName,
-  F extends typeof FlatNode<T> = typeof FlatNode<T>,
-  W extends typeof TreeNode<T> = typeof TreeNode<T>,
-  F2 extends typeof FlatNode<T> = F,
-  W2 extends typeof TreeNode<T> = W,
-> = (arg: [T, F, W]) => readonly [F2, W2]
-
-class NodeTypeBuilder<
-  T extends TypeName,
-  F extends typeof FlatNode<T>,
-  W extends typeof TreeNode<T>,
+class AbstractNodeType<
+  S extends NodeSpec,
+  T extends S['TypeName'],
+  F extends typeof FlatNode<S>,
+  W extends typeof TreeNode<S>,
 > {
   constructor(
     public readonly typeName: T,
     public readonly FlatNode: F,
     public readonly TreeNode: W,
   ) {}
+
+  specialize<
+    S2 extends S,
+    T2 extends S2['TypeName'],
+    F2 extends typeof FlatNode<S2>,
+    W2 extends TreeNode<S2>,
+  >(update: () => [T2, F2])
+}
+
+const BaseNodeType = new AbstractNodeType(null, FlatNode, TreeNode)
+
+interface ContentNodeType<
+  S extends NodeSpec,
+  F extends typeof FlatNode<S>,
+  T extends typeof TreeNode<S>,
+> extends AbstractNodeType<S, F, T> {
+  typeName: S['TypeName']
+  FlatNode: new (
+    store: EditorStore,
+    key: StoredKey<S['FlatValue']>,
+  ) => InstanceType<F>
+  TreeNode: new (jsonValue: S['JSONValue']) => InstanceType<T>
+  createFlatNode: (
+    store: EditorStore,
+    key: StoredKey<S['FlatValue']>,
+  ) => InstanceType<F>
+  createTreeNode: (jsonValue: S['JSONValue']) => InstanceType<T>
+}
+
+class NodeTypeBuilder<
+  S extends NodeSpec,
+  F extends typeof FlatNode<S>,
+  T extends typeof TreeNode<S>,
+> implements AbstractNodeType<S, F, T>
+{
+  constructor(public readonly typeName: S['TypeName'] | null = null) {}
 
   apply<F2 extends typeof FlatNode<T>, W2 extends typeof TreeNode<T>>(
     mixin: Mixin<T, F, W, F2, W2>,
@@ -364,6 +344,33 @@ class NodeTypeBuilder<
       : new NodeTypeBuilder(typeName, NonRootFlatNode<T>, NonRootTreeNode<T>)
   }
 }
+
+const BaseNodeType = { FlatNode, TreeNode } satisfies AbstractNodeType
+
+abstract class NonRootFlatNode<S extends NodeSpec> extends FlatNode<S> {
+  get parentKey(): Key {
+    const parentKey = this.getParentKeyFromStore()
+
+    invariant(parentKey != null, `Node ${this.key} has no parent`)
+
+    return parentKey
+  }
+}
+
+abstract class NonRootTreeNode<S extends NodeSpec> extends TreeNode<S> {
+  abstract store(
+    this: this & Writable,
+    parentKey: Key,
+  ): StoredKey<S['FlatValue']>
+}
+
+type Mixin<
+  T extends TypeName,
+  F extends typeof FlatNode<T> = typeof FlatNode<T>,
+  W extends typeof TreeNode<T> = typeof TreeNode<T>,
+  F2 extends typeof FlatNode<T> = F,
+  W2 extends typeof TreeNode<T> = W,
+> = (arg: [T, F, W]) => readonly [F2, W2]
 
 const TextType = NodeTypeBuilder.create('text')
   .apply(([_, BaseFlatNote, BaseTreeNode]) => {
