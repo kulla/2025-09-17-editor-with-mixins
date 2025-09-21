@@ -54,7 +54,7 @@ export class EditorStore {
     return this.parentKeys.get(key) ?? null
   }
 
-  has(key: Key): boolean {
+  has(key: Key): key is StoredKey<Key, FlatValue> {
     return this.values.has(key)
   }
 
@@ -155,10 +155,13 @@ class Transaction {
     ) => F,
     private readonly has: (key: Key) => boolean,
     private readonly storeValue: <K extends Key, F extends FlatValue>(
-      key: Key,
+      key: K,
       value: F,
     ) => StoredKey<K, F>,
-    private readonly setParentKey: (key: Key, parentKey: Key | null) => void,
+    private readonly setParentKey: (
+      key: NonRootKey,
+      parentKey: Key | null,
+    ) => void,
     private readonly generateKey: <T extends string>(
       typeName: T,
     ) => NonRootKey<T>,
@@ -270,13 +273,10 @@ const NodeType = { FlatNode, TreeNode } satisfies NodeType
 
 type Spec<N extends NodeType> = N extends NodeType<infer S> ? S : never
 
+// TODO: Avoid 'any' here
 interface ConcreteType<A extends NodeType> {
-  FlatNode: new (
-    ...args: ConstructorParameters<A['FlatNode']>
-  ) => InstanceType<A['FlatNode']>
-  TreeNode: new (
-    ...args: ConstructorParameters<A['TreeNode']>
-  ) => InstanceType<A['TreeNode']>
+  FlatNode: new (...args: any) => InstanceType<A['FlatNode']>
+  TreeNode: new (...args: any) => InstanceType<A['TreeNode']>
 }
 
 type NonRootSpec = Omit<NodeSpec, 'Key'>
@@ -378,97 +378,112 @@ function WrappedNode<T extends string, C extends ConcreteType<NonRootType>>(
 
 const ParagraphType = WrappedNode('paragraph', TextType)
 
-function ArrayNode<
-  T extends ArrayNodeTypeName,
-  C extends NonRootType<NodeMap[T]['childType']>,
->(childType: C) {
-  return (([typeName, BaseFlatNode, BaseTreeNode]) => {
-    class ArrayFlatNode extends BaseFlatNode {
-      override toJsonValue(): JsonValue<T> {
-        return this.value.map((childKey) =>
-          this.create(childType, childKey).toJsonValue(),
-        ) as JsonValue<T>
-      }
+function ArrayNode<T extends string, C extends ConcreteType<NonRootType>>(
+  typeName: T,
+  childType: C,
+) {
+  interface ArrayNodeSpec extends NonRootSpec {
+    TypeName: T
+    FlatValue: StoredKey<
+      NonRootKey<Spec<C>['TypeName']>,
+      Spec<C>['FlatValue']
+    >[]
+    JSONValue: Spec<C>['JSONValue'][]
+  }
 
-      getChildren(
-        this: this & Writable,
-      ): (InstanceType<C['FlatNode']> & Writable)[]
-      getChildren(): InstanceType<C['FlatNode']>[]
-      getChildren() {
-        return this.value.map((child) => this.create(childType, child))
-      }
+  class ArrayFlatNode extends NonRootType.FlatNode<ArrayNodeSpec> {
+    override toJsonValue(): ArrayNodeSpec['JSONValue'] {
+      return this.value.map((childKey) =>
+        new childType.FlatNode(this.store, childKey).toJsonValue(),
+      )
     }
 
-    class ArrayTreeNode extends BaseTreeNode {
-      override store(this: this & Writable, parentKey: Key): Key<T> {
-        return this.transaction.insert(
-          typeName,
-          parentKey,
-          (key) =>
-            this.getChildren().map((child) => child.store(key)) as FlatValue<T>,
-        )
-      }
+    getChildren(
+      this: this & Writable,
+    ): (InstanceType<C['FlatNode']> & Writable)[]
+    getChildren(): InstanceType<C['FlatNode']>[]
+    getChildren() {
+      return this.value.map((child) =>
+        new childType.FlatNode(this.store, child).copyStateFrom(this),
+      )
+    }
+  }
 
-      getChildren(
-        this: this & Writable,
-      ): (InstanceType<C['TreeNode']> & Writable)[]
-      getChildren(): InstanceType<C['TreeNode']>[]
-      getChildren() {
-        return this.jsonValue.map((child) => this.create(childType, child))
-      }
+  class ArrayTreeNode extends NonRootType.TreeNode<ArrayNodeSpec> {
+    override store(this: this & Writable, parentKey: Key) {
+      return this.transaction.insert(typeName, parentKey, (key) =>
+        this.getChildren().map((child) => child.store(key)),
+      )
     }
 
-    return [ArrayFlatNode, ArrayTreeNode]
-  }) satisfies Mixin<T, typeof NonRootFlatNode<T>, typeof NonRootTreeNode<T>>
+    getChildren(
+      this: this & Writable,
+    ): (InstanceType<C['TreeNode']> & Writable)[]
+    getChildren(): InstanceType<C['TreeNode']>[]
+    getChildren() {
+      return this.jsonValue.map((child) =>
+        new childType.TreeNode(child).copyStateFrom(this),
+      )
+    }
+  }
+
+  return { FlatNode: ArrayFlatNode, TreeNode: ArrayTreeNode }
 }
 
-const ContentType = NodeTypeBuilder.create('content')
-  .apply(ArrayNode(ParagraphType))
-  .finish()
+type ContentType = typeof ContentType
+const ContentType = ArrayNode('content', ParagraphType)
 
-export const RootType = NodeTypeBuilder.create('root')
-  .apply(([_, BaseFlatNode, BaseTreeNode]) => {
-    class RootFlatNode extends BaseFlatNode {
-      get parentKey(): null {
-        return null
-      }
+interface RootSpec extends NodeSpec {
+  TypeName: 'root'
+  Key: RootKey
+  FlatValue: StoredKey<
+    NonRootKey<Spec<ContentType>['TypeName']>,
+    Spec<ContentType>['FlatValue']
+  >
+  JSONValue: { type: 'document'; document: Spec<ContentType>['JSONValue'] }
+}
 
-      override toJsonValue(): JsonValue<'root'> {
-        const document = this.create(ContentType, this.value).toJsonValue()
+class RootFlatNode extends NodeType.FlatNode<RootSpec> {
+  override toJsonValue(): RootSpec['JSONValue'] {
+    const doc = new ContentType.FlatNode(this.store, this.value).toJsonValue()
 
-        return { type: 'document', document }
-      }
-    }
+    return { type: 'document', document: doc }
+  }
+}
 
-    class RootTreeNode extends BaseTreeNode {
-      store(this: this & Writable, rootKey: Key<'root'>): void {
-        const child = this.create(ContentType, this.jsonValue.document)
+class RootTreeNode extends NodeType.TreeNode<RootSpec> {
+  store(this: this & Writable, rootKey: RootKey) {
+    const doc = new ContentType.TreeNode(this.jsonValue.document)
+      .toWritable(this.transaction)
+      .store(rootKey)
 
-        this.transaction.insertRoot(rootKey, child.store(rootKey))
-      }
-    }
+    return this.transaction.insertRoot(rootKey, doc)
+  }
+}
 
-    return [RootFlatNode, RootTreeNode]
-  })
-  .finish()
+type RootType = typeof RootType
+const RootType = {
+  FlatNode: RootFlatNode,
+  TreeNode: RootTreeNode,
+} satisfies ConcreteType<NodeType<RootSpec>>
 
-const initialValue: JsonValue<'root'> = {
+const initialValue: Spec<RootType>['JSONValue'] = {
   type: 'document',
   document: [{ type: 'paragraph', value: 'Hello, Rsbuild!' }],
 }
-const rootKey: Key<'root'> = 'root:0'
 
 export default function App() {
   const { store } = useEditorStore()
+  const rootKey: RootKey | RootType['FlatNode']['prototype']['key'] = 'root'
 
   useEffect(() => {
     setTimeout(() => {
       if (store.has(rootKey)) return
 
       store.update((transaction) => {
-        RootType.createTreeNode(initialValue)
+        new RootType.TreeNode(initialValue)
           .toWritable(transaction)
-          .store(rootKey)
+          .store('root')
       })
     }, 1000)
   }, [store])
@@ -494,7 +509,7 @@ export default function App() {
           json: () => {
             if (!store.has(rootKey)) return ''
 
-            const jsonValue = RootType.createFlatNode(
+            const jsonValue = new RootType.FlatNode(
               store,
               rootKey,
             ).toJsonValue()
