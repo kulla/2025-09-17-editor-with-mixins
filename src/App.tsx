@@ -29,6 +29,22 @@ type FlatValue =
 
 type StoredKey<K extends Key, F extends FlatValue> = K & { __StoredType__: F }
 
+interface Transaction {
+  update<F extends FlatValue>(
+    key: StoredKey<Key, F>,
+    updateFn: F | ((current: F) => F),
+  ): void
+  insertRoot<F extends FlatValue>(
+    rootKey: RootKey,
+    value: F,
+  ): StoredKey<RootKey, F>
+  insert<T extends string, F extends FlatValue>(
+    typeName: T,
+    parentKey: Key,
+    createValue: (key: NonRootKey<T>) => F,
+  ): StoredKey<NonRootKey<T>, F>
+}
+
 export class EditorStore {
   protected readonly values: Y.Map<FlatValue>
   protected readonly parentKeys: Y.Map<Key | null>
@@ -85,13 +101,7 @@ export class EditorStore {
       return
     } else {
       this.ydoc.transact(() => {
-        this.currentTransaction = new Transaction(
-          (key) => this.getValue(key),
-          (key) => this.has(key),
-          (key, value) => this.storeValue(key, value),
-          (key, parentKey) => this.setParentKey(key, parentKey),
-          (type) => this.generateKey(type),
-        )
+        this.currentTransaction = this.createNewTransaction()
 
         updateFn(this.currentTransaction)
 
@@ -99,6 +109,33 @@ export class EditorStore {
 
         this.currentTransaction = null
       })
+    }
+  }
+
+  private createNewTransaction(): Transaction {
+    return {
+      update: (key, updateFn) => {
+        const currentValue = this.getValue(key)
+        const newValue =
+          typeof updateFn === 'function' ? updateFn(currentValue) : updateFn
+
+        this.storeValue(key, newValue)
+      },
+      insertRoot: (rootKey, value) => {
+        invariant(
+          !this.has(rootKey),
+          `Root key ${rootKey} already exists in the store`,
+        )
+
+        return this.storeValue(rootKey, value)
+      },
+      insert: (typeName, parentKey, createValue) => {
+        const newKey = this.generateKey(typeName)
+        const value = createValue(newKey)
+
+        this.parentKeys.set(newKey, parentKey)
+        return this.storeValue(newKey, value)
+      },
     }
   }
 
@@ -113,10 +150,6 @@ export class EditorStore {
     this.values.set(key, value)
 
     return key as StoredKey<K, F>
-  }
-
-  private setParentKey(key: NonRootKey, parentKey: Key | null) {
-    this.parentKeys.set(key, parentKey)
   }
 
   private generateKey<T extends string>(typeName: T): NonRootKey<T> {
@@ -146,62 +179,6 @@ export function useEditorStore() {
       return lastReturn.current
     },
   )
-}
-
-class Transaction {
-  constructor(
-    private readonly getValue: <F extends FlatValue>(
-      key: StoredKey<Key, F>,
-    ) => F,
-    private readonly has: (key: Key) => boolean,
-    private readonly storeValue: <K extends Key, F extends FlatValue>(
-      key: K,
-      value: F,
-    ) => StoredKey<K, F>,
-    private readonly setParentKey: (
-      key: NonRootKey,
-      parentKey: Key | null,
-    ) => void,
-    private readonly generateKey: <T extends string>(
-      typeName: T,
-    ) => NonRootKey<T>,
-  ) {}
-
-  update<F extends FlatValue>(
-    key: StoredKey<Key, F>,
-    updateFn: F | ((current: F) => F),
-  ) {
-    const currentValue = this.getValue(key)
-    const newValue =
-      typeof updateFn === 'function' ? updateFn(currentValue) : updateFn
-
-    this.storeValue(key, newValue)
-  }
-
-  insertRoot<F extends FlatValue>(
-    rootKey: RootKey,
-    value: F,
-  ): StoredKey<RootKey, F> {
-    invariant(
-      !this.has(rootKey),
-      'Root node already exists. Only one root node is allowed.',
-    )
-
-    return this.storeValue(rootKey, value)
-  }
-
-  insert<T extends string, F extends FlatValue>(
-    typeName: T,
-    parentKey: Key,
-    createValue: (key: NonRootKey<T>) => F,
-  ): StoredKey<NonRootKey<T>, F> {
-    const key = this.generateKey(typeName)
-    const value = createValue(key)
-
-    this.setParentKey(key, parentKey)
-
-    return this.storeValue(key, value)
-  }
 }
 
 type Writable = { transaction: Transaction }
