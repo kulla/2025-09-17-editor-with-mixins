@@ -178,10 +178,10 @@ class Transaction {
     this.storeValue(key, newValue)
   }
 
-  insertRoot(
+  insertRoot<F extends FlatValue>(
     rootKey: RootKey,
-    value: NonRootKey,
-  ): StoredKey<RootKey, NonRootKey> {
+    value: F,
+  ): StoredKey<RootKey, F> {
     invariant(
       !this.has(rootKey),
       'Root node already exists. Only one root node is allowed.',
@@ -472,23 +472,36 @@ const initialValue: Spec<RootType>['JSONValue'] = {
   document: [{ type: 'paragraph', value: 'Hello, Rsbuild!' }],
 }
 
-type StoredRootKey = RootType['FlatNode']['prototype']['key']
+function getFlatNode<C extends ConcreteType<NodeType>>(
+  Type: C,
+  store: EditorStore,
+  key: Spec<C>['Key'],
+): InstanceType<C['FlatNode']> | null {
+  if (!store.has(key)) return null
+
+  return new Type.FlatNode(store, key) as InstanceType<C['FlatNode']>
+}
 
 export default function App() {
   const { store } = useEditorStore()
-  const rootKey: StoredRootKey = 'root' as StoredRootKey
+  const rootNode = useRef<InstanceType<RootType['FlatNode']> | null>(null)
 
   useEffect(() => {
     setTimeout(() => {
-      if (store.has(rootKey)) return
+      rootNode.current = getFlatNode(RootType, store, 'root')
+
+      if (rootNode.current) return
 
       store.update((transaction) => {
-        new RootType.TreeNode(initialValue)
+        const rootKey = new RootType.TreeNode(initialValue)
           .toWritable(transaction)
           .store('root')
+
+        //@ts-expect-error
+        rootNode.current = new RootType.FlatNode(store, rootKey)
       })
     }, 1000)
-  }, [store, rootKey])
+  }, [store])
 
   return (
     <main className="p-10">
@@ -509,14 +522,9 @@ export default function App() {
               )
               .join('\n'),
           json: () => {
-            if (!store.has(rootKey)) return ''
+            if (rootNode.current == null) return ''
 
-            const jsonValue = new RootType.FlatNode(
-              store,
-              rootKey,
-            ).toJsonValue()
-
-            return JSON.stringify(jsonValue, null, 2)
+            return JSON.stringify(rootNode.current.toJsonValue(), null, 2)
           },
         }}
         showOnStartup={{ entries: true, json: true }}
