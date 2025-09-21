@@ -472,9 +472,11 @@ const initialValue: Spec<RootType>['JSONValue'] = {
   document: [{ type: 'paragraph', value: 'Hello, Rsbuild!' }],
 }
 
+type StoredRootKey = RootType['FlatNode']['prototype']['key']
+
 export default function App() {
   const { store } = useEditorStore()
-  const rootKey: RootKey | RootType['FlatNode']['prototype']['key'] = 'root'
+  const rootKey: StoredRootKey = 'root' as StoredRootKey
 
   useEffect(() => {
     setTimeout(() => {
@@ -486,7 +488,7 @@ export default function App() {
           .store('root')
       })
     }, 1000)
-  }, [store])
+  }, [store, rootKey])
 
   return (
     <main className="p-10">
