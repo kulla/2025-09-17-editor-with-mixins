@@ -6,62 +6,6 @@ import { useEffect, useRef, useSyncExternalStore } from 'react'
 import * as Y from 'yjs'
 import { DebugPanel } from './components/debug-panel'
 
-const initialValue: JsonValue<'root'> = {
-  type: 'document',
-  document: [{ type: 'paragraph', value: 'Hello, Rsbuild!' }],
-}
-const rootKey: Key<'root'> = 'root:0'
-
-export default function App() {
-  const { store } = useEditorStore()
-
-  useEffect(() => {
-    setTimeout(() => {
-      if (store.has(rootKey)) return
-
-      store.update((transaction) => {
-        RootType.createTreeNode(initialValue)
-          .toWritable(transaction)
-          .store(rootKey)
-      })
-    }, 1000)
-  }, [store])
-
-  return (
-    <main className="p-10">
-      <h1>Rsbuild with React</h1>
-      <p>Start building amazing things with Rsbuild.</p>
-      <DebugPanel
-        labels={{
-          entries: 'Internal editor store',
-          json: 'JSON representation',
-        }}
-        getCurrentValue={{
-          entries: () =>
-            store
-              .getValueEntries()
-              .map(
-                ([key, entry]) =>
-                  `${padStart(key, 11)}: ${JSON.stringify(entry)}`,
-              )
-              .join('\n'),
-          json: () => {
-            if (!store.has(rootKey)) return ''
-
-            const jsonValue = RootType.createFlatNode(
-              store,
-              rootKey,
-            ).toJsonValue()
-
-            return JSON.stringify(jsonValue, null, 2)
-          },
-        }}
-        showOnStartup={{ entries: true, json: true }}
-      />
-    </main>
-  )
-}
-
 let ydoc: Y.Doc | null = null
 
 function getSingletonYDoc() {
@@ -581,3 +525,59 @@ export const RootType = NodeTypeBuilder.create('root')
     return [RootFlatNode, RootTreeNode]
   })
   .finish()
+
+const initialValue: JsonValue<'root'> = {
+  type: 'document',
+  document: [{ type: 'paragraph', value: 'Hello, Rsbuild!' }],
+}
+const rootKey: Key<'root'> = 'root:0'
+
+export default function App() {
+  const { store } = useEditorStore()
+
+  useEffect(() => {
+    setTimeout(() => {
+      if (store.has(rootKey)) return
+
+      store.update((transaction) => {
+        RootType.createTreeNode(initialValue)
+          .toWritable(transaction)
+          .store(rootKey)
+      })
+    }, 1000)
+  }, [store])
+
+  return (
+    <main className="p-10">
+      <h1>Rsbuild with React</h1>
+      <p>Start building amazing things with Rsbuild.</p>
+      <DebugPanel
+        labels={{
+          entries: 'Internal editor store',
+          json: 'JSON representation',
+        }}
+        getCurrentValue={{
+          entries: () =>
+            store
+              .getValueEntries()
+              .map(
+                ([key, entry]) =>
+                  `${padStart(key, 11)}: ${JSON.stringify(entry)}`,
+              )
+              .join('\n'),
+          json: () => {
+            if (!store.has(rootKey)) return ''
+
+            const jsonValue = RootType.createFlatNode(
+              store,
+              rootKey,
+            ).toJsonValue()
+
+            return JSON.stringify(jsonValue, null, 2)
+          },
+        }}
+        showOnStartup={{ entries: true, json: true }}
+      />
+    </main>
+  )
+}
