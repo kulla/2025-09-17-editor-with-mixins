@@ -206,7 +206,7 @@ interface NodeType<S extends NodeSpec = NodeSpec> extends AbstractNodeType<S> {
   toJsonValue(node: FlatNode<S>): S['JSONValue']
 }
 
-function AbstractNode<S extends NodeSpec>() {
+function AbstractNode<S extends NodeSpec>(): AbstractNodeType<S> {
   return {
     __spec__(): S {
       throw new Error('This function should not be called')
@@ -223,7 +223,7 @@ function AbstractNode<S extends NodeSpec>() {
     getParentKey({ store, key }): S['ParentKey'] {
       return store.getParentKey(key)
     },
-  } satisfies AbstractNodeType<S>
+  }
 }
 
 type Spec<N extends { __spec__: () => NodeSpec }> = ReturnType<N['__spec__']>
@@ -249,7 +249,7 @@ type TextSpec = NonRootSpec<{
   JSONValue: string
 }>
 
-const TextType = {
+const TextType: NonRootType<TextSpec> = {
   typeName: 'text' as const,
 
   ...AbstractNode<TextSpec>(),
@@ -265,7 +265,7 @@ const TextType = {
   storeNonRoot(jsonValue, tx, parentKey) {
     return tx.insert('text', parentKey, () => new Y.Text(jsonValue))
   },
-} satisfies NonRootType<TextSpec>
+}
 
 type WrappedNodeSpec<T extends string, C extends NonRootSpec> = NonRootSpec<{
   TypeName: T
@@ -281,7 +281,7 @@ interface WrappedNodeType<T extends string, C extends NonRootSpec>
 function WrappedNode<T extends string, C extends NonRootType>(
   typeName: T,
   childType: C,
-) {
+): WrappedNodeType<T, Spec<C>> {
   return {
     typeName,
 
@@ -306,7 +306,7 @@ function WrappedNode<T extends string, C extends NonRootType>(
         childType.storeNonRoot(jsonValue.value, tx, key),
       )
     },
-  } satisfies WrappedNodeType<T, Spec<C>>
+  }
 }
 
 const ParagraphType = WrappedNode('paragraph', TextType)
@@ -332,7 +332,7 @@ function isArrayOf<C>(
 function ArrayNode<T extends string, C extends NonRootType>(
   typeName: T,
   childType: C,
-) {
+): ArrayNodeType<T, Spec<C>> {
   return {
     typeName,
 
@@ -355,7 +355,7 @@ function ArrayNode<T extends string, C extends NonRootType>(
         jsonValue.map((item) => childType.storeNonRoot(item, tx, key)),
       )
     },
-  } satisfies ArrayNodeType<T, Spec<C>>
+  }
 }
 
 const ContentType = ArrayNode('content', ParagraphType)
@@ -375,7 +375,7 @@ interface RootType<C extends NonRootSpec> extends NodeType<RootSpec<C>> {
   ): void
 }
 
-function RootType<C extends NonRootType>(childType: C) {
+function RootType<C extends NonRootType>(childType: C): RootType<Spec<C>> {
   return {
     typeName: 'root' as const,
 
@@ -395,7 +395,7 @@ function RootType<C extends NonRootType>(childType: C) {
 
       tx.insertRoot(rootKey, flatValue)
     },
-  } satisfies RootType<Spec<C>>
+  }
 }
 
 type AppRootType = typeof AppRootType
