@@ -181,184 +181,125 @@ export function useEditorStore() {
   )
 }
 
-type Writable = { transaction: Transaction }
-
-abstract class Stateful {
-  protected transaction: Transaction | null = null
-
-  toWritable(transaction: Transaction): this & Writable {
-    this.transaction = transaction
-
-    return this as this & Writable
-  }
-
-  copyStateFrom(other: Stateful & Writable): this & Writable
-  copyStateFrom(other: Stateful): this
-  copyStateFrom(other: Stateful): this {
-    this.transaction = other.transaction
-    return this
-  }
-}
-
 interface NodeSpec {
   TypeName: string
   Key: Key
+  ParentKey: Key | null
   FlatValue: FlatValue
   JSONValue: Record<string, unknown> | unknown[] | PrimitiveValue
 }
 
-abstract class FlatNode<S extends NodeSpec> extends Stateful {
-  constructor(
-    protected store: EditorStore,
-    public key: StoredKey<S['Key'], S['FlatValue']>,
-  ) {
-    super()
-
-    invariant(store.has(key), `Key ${key} does not exist in the store`)
-  }
-
-  get value(): S['FlatValue'] {
-    return this.store.getValue(this.key)
-  }
-
-  abstract toJsonValue(): S['JSONValue']
-
-  protected getParentKeyFromStore(): Key | null {
-    return this.store.getParentKey(this.key)
-  }
-
-  get __spec__(): S {
-    throw new Error('Not meant to be called directly')
-  }
-}
-
-abstract class TreeNode<S extends NodeSpec> extends Stateful {
-  constructor(public readonly jsonValue: S['JSONValue']) {
-    super()
-  }
-
-  get __spec__(): S {
-    throw new Error('Not meant to be called directly')
-  }
+interface FlatNode<S extends NodeSpec> {
+  store: EditorStore
+  key: StoredKey<S['Key'], S['FlatValue']>
 }
 
 interface NodeType<S extends NodeSpec = NodeSpec> {
-  FlatNode: typeof FlatNode<S>
-  TreeNode: typeof TreeNode<S>
+  __spec__(): S
+  typeName: S['TypeName']
+
+  getFlatValue(node: FlatNode<S>): S['FlatValue']
+  getParentKey(node: FlatNode<S>): S['ParentKey']
+  toJsonValue(node: FlatNode<S>): S['JSONValue']
 }
-const NodeType = { FlatNode, TreeNode } satisfies NodeType
+
+function AbstractNodeType<S extends NodeSpec>() {
+  return {
+    __spec__(): S {
+      throw new Error('This function should not be called')
+    },
+
+    getFlatValue({ store, key }): S['FlatValue'] {
+      return store.getValue(key)
+    },
+
+    getParentKey({ store, key }): S['ParentKey'] {
+      return store.getParentKey(key)
+    },
+  } satisfies Partial<NodeType<S>>
+}
 
 type Spec<N extends NodeType> = N extends NodeType<infer S> ? S : never
 
-// TODO: Avoid 'any' here
-interface ConcreteType<A extends NodeType> {
-  FlatNode: new (...args: any) => InstanceType<A['FlatNode']>
-  TreeNode: new (...args: any) => InstanceType<A['TreeNode']>
-}
-
-type NonRootSpec = Omit<NodeSpec, 'Key'>
-
-abstract class NonRootFlatNode<S extends NonRootSpec> extends NodeType.FlatNode<
-  S & { Key: NonRootKey<S['TypeName']> }
-> {
-  get parentKey(): Key {
-    const parentKey = this.getParentKeyFromStore()
-
-    invariant(parentKey != null, `Node ${this.key} has no parent`)
-
-    return parentKey
-  }
-}
-
-abstract class NonRootTreeNode<S extends NonRootSpec> extends NodeType.TreeNode<
-  S & { Key: NonRootKey<S['TypeName']> }
-> {
-  abstract store(
-    this: this & Writable,
-    parentKey: Key,
-  ): StoredKey<NonRootKey<S['TypeName']>, FlatValue>
+type NonRootSpec = Omit<NodeSpec, 'Key' | 'ParentKey'>
+type ToNodeSpec<S extends NonRootSpec> = S & {
+  Key: NonRootKey<S['TypeName']>
+  ParentKey: Key
 }
 
 interface NonRootType<S extends NonRootSpec = NonRootSpec>
-  extends NodeType<S & { Key: NonRootKey<S['TypeName']> }> {
-  FlatNode: typeof NonRootFlatNode<S>
-  TreeNode: typeof NonRootTreeNode<S>
-}
-const NonRootType = {
-  FlatNode: NonRootFlatNode,
-  TreeNode: NonRootTreeNode,
-} satisfies NonRootType<NonRootSpec>
-
-interface TextSpec extends NonRootSpec {
-  TypeName: 'text'
-  FlatValue: Y.Text
-  JSONValue: string
+  extends NodeType<ToNodeSpec<S>> {
+  storeNonRoot(
+    jsonValue: S['JSONValue'],
+    tx: Transaction,
+    parentKey: Key,
+  ): StoredKey<NonRootKey<S['TypeName']>, S['FlatValue']>
 }
 
-class TextFlatNode extends NonRootType.FlatNode<TextSpec> {
-  override toJsonValue() {
-    return this.value.toString()
-  }
+function AbstractNonRootType<S extends NonRootSpec>() {
+  return AbstractNodeType<ToNodeSpec<S>>() satisfies Partial<NonRootType<S>>
 }
 
-class TextTreeNode extends NonRootType.TreeNode<TextSpec> {
-  override store(this: this & Writable, parentKey: Key) {
-    const value = new Y.Text(this.jsonValue)
-
-    return this.transaction.insert('text', parentKey, () => value)
-  }
-}
+type TextSpec = { TypeName: 'text'; FlatValue: Y.Text; JSONValue: string }
 
 const TextType = {
-  FlatNode: TextFlatNode,
-  TreeNode: TextTreeNode,
-} satisfies ConcreteType<NonRootType<TextSpec>>
+  typeName: 'text' as const,
 
-function WrappedNode<T extends string, C extends ConcreteType<NonRootType>>(
+  ...AbstractNonRootType<TextSpec>(),
+
+  toJsonValue(node) {
+    return this.getFlatValue(node).toString()
+  },
+
+  storeNonRoot(jsonValue, tx, parentKey) {
+    return tx.insert('text', parentKey, () => new Y.Text(jsonValue))
+  },
+} satisfies NonRootType<TextSpec>
+
+type WrappedNodeSpec<T extends string, C extends NonRootType> = {
+  TypeName: T
+  FlatValue: StoredKey<NonRootKey<Spec<C>['TypeName']>, Spec<C>['FlatValue']>
+  JSONValue: { type: T; value: Spec<C>['JSONValue'] }
+}
+
+interface WrappedNodeType<T extends string, C extends NonRootType>
+  extends NonRootType<WrappedNodeSpec<T, C>> {
+  getChild(node: FlatNode<ToNodeSpec<WrappedNodeSpec<T, C>>>): FlatNode<Spec<C>>
+}
+
+function WrappedNode<T extends string, C extends NonRootType>(
   typeName: T,
   childType: C,
 ) {
-  interface WrappedNodeSpec {
-    TypeName: T
-    FlatValue: StoredKey<NonRootKey<Spec<C>['TypeName']>, Spec<C>['FlatValue']>
-    JSONValue: { type: T; value: Spec<C>['JSONValue'] }
-  }
+  return {
+    typeName,
 
-  class WrappedFlatNode extends NonRootType.FlatNode<WrappedNodeSpec> {
-    override toJsonValue(): WrappedNodeSpec['JSONValue'] {
-      return { type: typeName, value: this.getChild().toJsonValue() }
-    }
+    ...AbstractNonRootType<WrappedNodeSpec<T, C>>(),
 
-    getChild(this: this & Writable): InstanceType<C['FlatNode']> & Writable
-    getChild(): InstanceType<C['FlatNode']>
-    getChild() {
-      return new childType.FlatNode(this.store, this.value).copyStateFrom(this)
-    }
-  }
+    toJsonValue(node) {
+      const value = childType.toJsonValue(this.getChild(node))
 
-  class WrappedTreeNode extends NonRootType.TreeNode<WrappedNodeSpec> {
-    override store(this: this & Writable, parentKey: Key) {
-      return this.transaction.insert(typeName, parentKey, (key) =>
-        this.getChild().store(key),
+      return { type: typeName, value }
+    },
+
+    getChild(node) {
+      return { store: node.store, key: this.getFlatValue(node) }
+    },
+
+    storeNonRoot(jsonValue, tx, parentKey) {
+      return tx.insert(typeName, parentKey, (key) =>
+        childType.storeNonRoot(jsonValue.value, tx, key),
       )
-    }
-
-    getChild(this: this & Writable): InstanceType<C['TreeNode']> & Writable
-    getChild(): InstanceType<C['TreeNode']>
-    getChild() {
-      return new childType.TreeNode(this.jsonValue.value).copyStateFrom(this)
-    }
-  }
-
-  return { FlatNode: WrappedFlatNode, TreeNode: WrappedTreeNode }
+    },
+  } satisfies WrappedNodeType<T, C>
 }
 
 const ParagraphType = WrappedNode('paragraph', TextType)
 
-function ArrayNode<T extends string, C extends ConcreteType<NonRootType>>(
-  typeName: T,
-  childType: C,
-) {
+function ArrayNode<
+  T extends string,
+  C extends ConcreteType<AbstractNonRootType>,
+>(typeName: T, childType: C) {
   interface ArrayNodeSpec extends NonRootSpec {
     TypeName: T
     FlatValue: StoredKey<
@@ -368,7 +309,7 @@ function ArrayNode<T extends string, C extends ConcreteType<NonRootType>>(
     JSONValue: Spec<C>['JSONValue'][]
   }
 
-  class ArrayFlatNode extends NonRootType.FlatNode<ArrayNodeSpec> {
+  class ArrayFlatNode extends AbstractNonRootType.FlatNode<ArrayNodeSpec> {
     override toJsonValue(): ArrayNodeSpec['JSONValue'] {
       return this.value.map((childKey) =>
         new childType.FlatNode(this.store, childKey).toJsonValue(),
@@ -386,7 +327,7 @@ function ArrayNode<T extends string, C extends ConcreteType<NonRootType>>(
     }
   }
 
-  class ArrayTreeNode extends NonRootType.TreeNode<ArrayNodeSpec> {
+  class ArrayTreeNode extends AbstractNonRootType.TreeNode<ArrayNodeSpec> {
     override store(this: this & Writable, parentKey: Key) {
       return this.transaction.insert(typeName, parentKey, (key) =>
         this.getChildren().map((child) => child.store(key)),
