@@ -40,11 +40,11 @@ interface Transaction {
     key: Key,
     updateFn: F | ((current: F) => F),
   ): void
-  insertRoot<F extends FlatValue>(rootKey: RootKey, value: F): void
-  insert<T extends string, F extends FlatValue>(
+  insertRoot(rootKey: RootKey, value: NonRootKey): void
+  insert<T extends string>(
     typeName: T,
     parentKey: Key,
-    createValue: (key: NonRootKey<T>) => F,
+    createValue: (key: NonRootKey<T>) => FlatValue,
   ): NonRootKey<T>
 }
 
@@ -62,7 +62,7 @@ export class EditorStore {
   }
 
   getValue<F extends FlatValue>(
-    validator: (value: FlatValue) => value is F,
+    validator: (v: FlatValue) => v is F,
     key: Key,
   ): F {
     const value = this.values.get(key)
