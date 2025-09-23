@@ -210,7 +210,7 @@ function AbstractNode<S extends NodeSpec>() {
     },
 
     getFlatValue({ store, key }) {
-      return store.getValue((f) => this.isValidFlatValue(f), key)
+      return store.getValue(this.isValidFlatValue, key)
     },
 
     getParentKey({ store, key }) {
