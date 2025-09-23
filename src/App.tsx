@@ -221,14 +221,14 @@ function AbstractNodeType<S extends NodeSpec>() {
 
 type Spec<N extends { __spec__: () => NodeSpec }> = ReturnType<N['__spec__']>
 
-type NonRootSpec = Omit<NodeSpec, 'Key' | 'ParentKey'>
-type ToNodeSpec<S extends NonRootSpec> = S & {
-  Key: NonRootKey<S['TypeName']>
-  ParentKey: Key
-}
+type NonRootSpec<
+  S extends Omit<NodeSpec, 'Key' | 'ParentKey'> = Omit<
+    NodeSpec,
+    'Key' | 'ParentKey'
+  >,
+> = S & { Key: NonRootKey<S['TypeName']>; ParentKey: Key }
 
-interface NonRootType<S extends NonRootSpec = NonRootSpec>
-  extends NodeType<ToNodeSpec<S>> {
+interface NonRootType<S extends NonRootSpec = NonRootSpec> extends NodeType<S> {
   storeNonRoot(
     jsonValue: S['JSONValue'],
     tx: Transaction,
@@ -237,10 +237,14 @@ interface NonRootType<S extends NonRootSpec = NonRootSpec>
 }
 
 function AbstractNonRootType<S extends NonRootSpec>() {
-  return AbstractNodeType<ToNodeSpec<S>>() satisfies Partial<NonRootType<S>>
+  return AbstractNodeType<S>() satisfies Partial<NonRootType<S>>
 }
 
-type TextSpec = { TypeName: 'text'; FlatValue: Y.Text; JSONValue: string }
+type TextSpec = NonRootSpec<{
+  TypeName: 'text'
+  FlatValue: Y.Text
+  JSONValue: string
+}>
 
 const TextType = {
   typeName: 'text' as const,
@@ -256,15 +260,15 @@ const TextType = {
   },
 } satisfies NonRootType<TextSpec>
 
-type WrappedNodeSpec<T extends string, C extends NonRootType> = {
+type WrappedNodeSpec<T extends string, C extends NonRootType> = NonRootSpec<{
   TypeName: T
   FlatValue: StoredKey<NonRootKey<Spec<C>['TypeName']>, Spec<C>['FlatValue']>
   JSONValue: { type: T; value: Spec<C>['JSONValue'] }
-}
+}>
 
 interface WrappedNodeType<T extends string, C extends NonRootType>
   extends NonRootType<WrappedNodeSpec<T, C>> {
-  getChild(node: FlatNode<ToNodeSpec<WrappedNodeSpec<T, C>>>): FlatNode<Spec<C>>
+  getChild(node: FlatNode<WrappedNodeSpec<T, C>>): FlatNode<Spec<C>>
 }
 
 function WrappedNode<T extends string, C extends NonRootType>(
@@ -296,18 +300,15 @@ function WrappedNode<T extends string, C extends NonRootType>(
 
 const ParagraphType = WrappedNode('paragraph', TextType)
 
-interface ArrayNodeSpec<T extends string, C extends NonRootType>
-  extends NonRootSpec {
+type ArrayNodeSpec<T extends string, C extends NonRootType> = NonRootSpec<{
   TypeName: T
   FlatValue: StoredKey<NonRootKey<Spec<C>['TypeName']>, Spec<C>['FlatValue']>[]
   JSONValue: Spec<C>['JSONValue'][]
-}
+}>
 
 interface ArrayNodeType<T extends string, C extends NonRootType>
   extends NonRootType<ArrayNodeSpec<T, C>> {
-  getChildren(
-    node: FlatNode<ToNodeSpec<ArrayNodeSpec<T, C>>>,
-  ): FlatNode<Spec<C>>[]
+  getChildren(node: FlatNode<ArrayNodeSpec<T, C>>): FlatNode<Spec<C>>[]
 }
 
 function ArrayNode<T extends string, C extends NonRootType>(
