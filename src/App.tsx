@@ -342,8 +342,7 @@ function ArrayNode<T extends string, C extends NonRootType>(
       return isArrayOf(value, (v) => isNonRootKey(v, childType.typeName))
     },
 
-    // TODO: Why do I need a typecast here?!
-    toJsonValue(node): Spec<C>['JSONValue'][] {
+    toJsonValue(node) {
       return this.getChildren(node).map((child) => childType.toJsonValue(child))
     },
 
