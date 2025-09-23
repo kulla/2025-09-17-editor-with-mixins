@@ -196,13 +196,13 @@ interface FlatNode<S extends NodeSpec> {
 
 interface AbstractNodeType<S extends NodeSpec> {
   __spec__(): S
-  isValidFlatValue(value: FlatValue): value is S['FlatValue']
-  getFlatValue(node: FlatNode<S>): S['FlatValue']
-  getParentKey(node: FlatNode<S>): S['ParentKey']
+  getFlatValue(this: NodeType<S>, node: FlatNode<S>): S['FlatValue']
+  getParentKey(this: NodeType<S>, node: FlatNode<S>): S['ParentKey']
 }
 
 interface NodeType<S extends NodeSpec = NodeSpec> extends AbstractNodeType<S> {
   typeName: S['TypeName']
+  isValidFlatValue(value: FlatValue): value is S['FlatValue']
   toJsonValue(node: FlatNode<S>): S['JSONValue']
 }
 
@@ -210,10 +210,6 @@ function AbstractNode<S extends NodeSpec>(): AbstractNodeType<S> {
   return {
     __spec__() {
       throw new Error('This function should not be called')
-    },
-
-    isValidFlatValue(_value: FlatValue): _value is S['FlatValue'] {
-      throw new Error('isValidFlatValue not implemented')
     },
 
     getFlatValue({ store, key }) {
