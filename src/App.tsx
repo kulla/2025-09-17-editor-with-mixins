@@ -62,7 +62,7 @@ export class EditorStore {
   }
 
   getValue<F extends FlatValue>(
-    validator: (v: FlatValue) => v is F,
+    validator: (value: FlatValue) => value is F,
     key: Key,
   ): F {
     const value = this.values.get(key)
@@ -228,19 +228,18 @@ function AbstractNode<S extends NodeSpec>(): AbstractNodeType<S> {
 
 type Spec<N extends { __spec__: () => NodeSpec }> = ReturnType<N['__spec__']>
 
-type NonRootSpec<
-  S extends Omit<NodeSpec, 'Key' | 'ParentKey'> = Omit<
-    NodeSpec,
-    'Key' | 'ParentKey'
-  >,
-> = S & { Key: NonRootKey<S['TypeName']>; ParentKey: Key }
+type NonRootSpecValue = Omit<NodeSpec, 'Key' | 'ParentKey'>
+type NonRootSpec<S extends NonRootSpecValue = NonRootSpecValue> = S & {
+  Key: NonRootKey<S['TypeName']>
+  ParentKey: Key
+}
 
 interface NonRootType<S extends NonRootSpec = NonRootSpec> extends NodeType<S> {
   storeNonRoot(
     jsonValue: S['JSONValue'],
     tx: Transaction,
-    parentKey: Key,
-  ): NonRootKey<S['TypeName']>
+    parentKey: S['ParentKey'],
+  ): S['Key']
 }
 
 type TextSpec = NonRootSpec<{
