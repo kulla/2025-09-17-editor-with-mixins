@@ -213,7 +213,7 @@ function AbstractNode<S extends NodeSpec>() {
       return store.getValue((f) => this.isValidFlatValue(f), key)
     },
 
-    getParentKey({ store, key }): S['ParentKey'] {
+    getParentKey({ store, key }) {
       return store.getParentKey(key)
     },
   } satisfies Partial<NodeType<S>>
@@ -225,6 +225,21 @@ type NonRootSpecValue = Omit<NodeSpec, 'Key' | 'ParentKey'>
 type NonRootSpec<S extends NonRootSpecValue = NonRootSpecValue> = S & {
   Key: NonRootKey<S['TypeName']>
   ParentKey: Key
+}
+
+function NonRootNode<S extends NonRootSpec>() {
+  const Base = AbstractNode<S>()
+
+  return {
+    ...Base,
+    getParentKey(node) {
+      const parentKey = Base.getParentKey(node)
+
+      invariant(parentKey != null, 'Non-root node must have a parent key')
+
+      return parentKey
+    },
+  } satisfies Partial<NodeType<S>>
 }
 
 interface NonRootType<S extends NonRootSpec = NonRootSpec> extends NodeType<S> {
@@ -245,7 +260,7 @@ type TextSpec = NonRootSpec<{
 const TextType: NonRootType<TextSpec> = {
   typeName: 'text' as const,
 
-  ...AbstractNode<TextSpec>(),
+  ...NonRootNode<TextSpec>(),
 
   isValidFlatValue(value) {
     return value instanceof Y.Text
@@ -278,7 +293,7 @@ function WrappedNode<T extends string, C extends NonRootType>(
   return {
     typeName,
 
-    ...AbstractNode<WrappedNodeSpec<T, Spec<C>>>(),
+    ...NonRootNode<WrappedNodeSpec<T, Spec<C>>>(),
 
     isValidFlatValue(value) {
       return isNonRootKey(value, childType.typeName)
@@ -329,7 +344,7 @@ function ArrayNode<T extends string, C extends NonRootType>(
   return {
     typeName,
 
-    ...AbstractNode<ArrayNodeSpec<T, Spec<C>>>(),
+    ...NonRootNode<ArrayNodeSpec<T, Spec<C>>>(),
 
     isValidFlatValue(value) {
       return isArrayOf(value, (v) => isNonRootKey(v, childType.typeName))
@@ -373,6 +388,10 @@ function RootType<C extends NonRootType>(childType: C): RootType<Spec<C>> {
     typeName: 'root' as const,
 
     ...AbstractNode<RootSpec<Spec<C>>>(),
+
+    getParentKey() {
+      return null
+    },
 
     isValidFlatValue(value) {
       return isNonRootKey(value, childType.typeName)
