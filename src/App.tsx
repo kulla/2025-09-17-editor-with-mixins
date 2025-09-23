@@ -321,44 +321,47 @@ function ArrayNode<T extends string, C extends NonRootType>(
   } satisfies ArrayNodeType<T, C>
 }
 
-type ContentType = typeof ContentType
 const ContentType = ArrayNode('content', ParagraphType)
 
-interface RootSpec extends NodeSpec {
+interface RootSpec<C extends NonRootSpec> extends NodeSpec {
   TypeName: 'root'
   Key: RootKey
-  FlatValue: NonRootKey<Spec<ContentType>['TypeName']>
-  JSONValue: { type: 'document'; document: Spec<ContentType>['JSONValue'] }
+  FlatValue: NonRootKey<C['TypeName']>
+  JSONValue: { type: 'document'; document: C['JSONValue'] }
 }
 
-interface RootType extends NodeType<RootSpec> {
+interface RootType<C extends NonRootSpec> extends NodeType<RootSpec<C>> {
   storeRoot(
-    jsonValue: RootSpec['JSONValue'],
+    jsonValue: RootSpec<C>['JSONValue'],
     tx: Transaction,
     rootKey: RootKey,
   ): void
 }
 
-const RootType = {
-  typeName: 'root' as const,
+function RootType<C extends NonRootType>(childType: C) {
+  return {
+    typeName: 'root' as const,
 
-  ...AbstractNodeType<RootSpec>(),
+    ...AbstractNodeType<RootSpec<Spec<C>>>(),
 
-  toJsonValue(node) {
-    const value = this.getFlatValue(node)
-    const doc = ContentType.toJsonValue({ store: node.store, key: value })
+    toJsonValue(node) {
+      const value = this.getFlatValue(node)
+      const doc = childType.toJsonValue({ store: node.store, key: value })
 
-    return { type: 'document', document: doc }
-  },
+      return { type: 'document', document: doc }
+    },
 
-  storeRoot(jsonValue, tx, rootKey) {
-    const flatValue = ContentType.storeNonRoot(jsonValue.document, tx, rootKey)
+    storeRoot({ document }, tx, rootKey) {
+      const flatValue = childType.storeNonRoot(document, tx, rootKey)
 
-    tx.insertRoot(rootKey, flatValue)
-  },
-} satisfies RootType
+      tx.insertRoot(rootKey, flatValue)
+    },
+  } satisfies RootType<Spec<C>>
+}
 
-const initialValue: Spec<RootType>['JSONValue'] = {
+type AppRootType = typeof AppRootType
+const AppRootType = RootType(ContentType)
+const initialValue: Spec<AppRootType>['JSONValue'] = {
   type: 'document',
   document: [{ type: 'paragraph', value: 'Hello, Rsbuild!' }],
 }
@@ -371,7 +374,7 @@ export default function App() {
     setTimeout(() => {
       if (store.has(rootKey)) return
 
-      store.update((tx) => RootType.storeRoot(initialValue, tx, 'root'))
+      store.update((tx) => AppRootType.storeRoot(initialValue, tx, 'root'))
     }, 1000)
   }, [store])
 
@@ -394,7 +397,7 @@ export default function App() {
           json: () => {
             if (!store.has(rootKey)) return ''
 
-            const jsonValue = RootType.toJsonValue({ store, key: rootKey })
+            const jsonValue = AppRootType.toJsonValue({ store, key: rootKey })
             return JSON.stringify(jsonValue, null, 2)
           },
         }}
