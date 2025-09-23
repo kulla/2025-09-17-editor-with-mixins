@@ -194,19 +194,16 @@ interface FlatNode<S extends NodeSpec> {
   key: S['Key']
 }
 
-interface AbstractNodeType<S extends NodeSpec> {
-  __spec__(): S
-  getFlatValue(this: NodeType<S>, node: FlatNode<S>): S['FlatValue']
-  getParentKey(this: NodeType<S>, node: FlatNode<S>): S['ParentKey']
-}
-
-interface NodeType<S extends NodeSpec = NodeSpec> extends AbstractNodeType<S> {
+interface NodeType<S extends NodeSpec = NodeSpec> {
   typeName: S['TypeName']
+  getFlatValue(this: NodeType<S>, node: FlatNode<S>): S['FlatValue']
+  getParentKey(node: FlatNode<S>): S['ParentKey']
   isValidFlatValue(value: FlatValue): value is S['FlatValue']
   toJsonValue(node: FlatNode<S>): S['JSONValue']
+  __spec__(): S
 }
 
-function AbstractNode<S extends NodeSpec>(): AbstractNodeType<S> {
+function AbstractNode<S extends NodeSpec>() {
   return {
     __spec__() {
       throw new Error('This function should not be called')
@@ -216,10 +213,10 @@ function AbstractNode<S extends NodeSpec>(): AbstractNodeType<S> {
       return store.getValue((f) => this.isValidFlatValue(f), key)
     },
 
-    getParentKey({ store, key }) {
+    getParentKey({ store, key }): S['ParentKey'] {
       return store.getParentKey(key)
     },
-  }
+  } satisfies Partial<NodeType<S>>
 }
 
 type Spec<N extends { __spec__: () => NodeSpec }> = ReturnType<N['__spec__']>
@@ -231,6 +228,7 @@ type NonRootSpec<S extends NonRootSpecValue = NonRootSpecValue> = S & {
 }
 
 interface NonRootType<S extends NonRootSpec = NonRootSpec> extends NodeType<S> {
+  getParentKey(node: FlatNode<S>): S['ParentKey']
   storeNonRoot(
     jsonValue: S['JSONValue'],
     tx: Transaction,
