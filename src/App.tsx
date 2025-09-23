@@ -385,14 +385,12 @@ export default function App() {
           json: 'JSON representation',
         }}
         getCurrentValue={{
-          entries: () =>
-            store
-              .getValueEntries()
-              .map(
-                ([key, entry]) =>
-                  `${padStart(key, 11)}: ${JSON.stringify(entry)}`,
-              )
-              .join('\n'),
+          entries: () => {
+            const stringifyEntry = ([key, entry]: [string, unknown]) =>
+              `${padStart(key, 11)}: ${JSON.stringify(entry)}`
+
+            return store.getValueEntries().map(stringifyEntry).join('\n')
+          },
           json: () => {
             if (!store.has(rootKey)) return ''
 
