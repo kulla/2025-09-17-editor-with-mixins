@@ -62,13 +62,13 @@ export class EditorStore {
   }
 
   getValue<F extends FlatValue>(
-    validator: (value: FlatValue) => value is F,
+    guard: (value: FlatValue) => value is F,
     key: Key,
   ): F {
     const value = this.values.get(key)
 
     invariant(value != null, `Value for key ${key} not found`)
-    invariant(validator(value), `Value for key ${key} has unexpected type`)
+    invariant(guard(value), `Value for key ${key} has unexpected type`)
 
     return value
   }
@@ -121,8 +121,8 @@ export class EditorStore {
 
   private createNewTransaction(): Transaction {
     return {
-      update: (validator, key, updateFn) => {
-        const currentValue = this.getValue(validator, key)
+      update: (guard, key, updateFn) => {
+        const currentValue = this.getValue(guard, key)
         const newValue =
           typeof updateFn === 'function' ? updateFn(currentValue) : updateFn
 
