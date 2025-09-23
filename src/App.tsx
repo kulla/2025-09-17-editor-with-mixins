@@ -219,7 +219,7 @@ function AbstractNodeType<S extends NodeSpec>() {
   } satisfies Partial<NodeType<S>>
 }
 
-type Spec<N extends NodeType> = N extends NodeType<infer S> ? S : never
+type Spec<N extends { __spec__: () => NodeSpec }> = ReturnType<N['__spec__']>
 
 type NonRootSpec = Omit<NodeSpec, 'Key' | 'ParentKey'>
 type ToNodeSpec<S extends NonRootSpec> = S & {
@@ -319,7 +319,8 @@ function ArrayNode<T extends string, C extends NonRootType>(
 
     ...AbstractNonRootType<ArrayNodeSpec<T, C>>(),
 
-    toJsonValue(node) {
+    // TODO: Why do I need a typecast here?!
+    toJsonValue(node): Spec<C>['JSONValue'][] {
       return this.getChildren(node).map((child) => childType.toJsonValue(child))
     },
 
@@ -335,7 +336,8 @@ function ArrayNode<T extends string, C extends NonRootType>(
   } satisfies ArrayNodeType<T, C>
 }
 
-const ContentType = ArrayNode('document', ParagraphType)
+type ContentType = typeof ContentType
+const ContentType = ArrayNode('content', ParagraphType)
 
 interface RootSpec extends NodeSpec {
   TypeName: 'root'
@@ -347,62 +349,64 @@ interface RootSpec extends NodeSpec {
   JSONValue: { type: 'document'; document: Spec<ContentType>['JSONValue'] }
 }
 
-class RootFlatNode extends NodeType.FlatNode<RootSpec> {
-  override toJsonValue(): RootSpec['JSONValue'] {
-    const doc = new ContentType.FlatNode(this.store, this.value).toJsonValue()
+interface RootType extends NodeType<RootSpec> {
+  storeRoot(
+    jsonValue: RootSpec['JSONValue'],
+    tx: Transaction,
+    rootKey: RootKey,
+  ): StoredKey<RootKey, RootSpec['FlatValue']>
+}
+
+const RootType = {
+  typeName: 'root' as const,
+
+  ...AbstractNodeType<RootSpec>(),
+
+  toJsonValue(node) {
+    const value = node.store.getValue(node.key)
+    const doc = ContentType.toJsonValue({ store: node.store, key: value })
 
     return { type: 'document', document: doc }
-  }
-}
+  },
 
-class RootTreeNode extends NodeType.TreeNode<RootSpec> {
-  store(this: this & Writable, rootKey: RootKey) {
-    const doc = new ContentType.TreeNode(this.jsonValue.document)
-      .toWritable(this.transaction)
-      .store(rootKey)
+  storeRoot(jsonValue, tx, rootKey) {
+    const flatValue = ContentType.storeNonRoot(jsonValue.document, tx, rootKey)
 
-    return this.transaction.insertRoot(rootKey, doc)
-  }
-}
-
-type RootType = typeof RootType
-const RootType = {
-  FlatNode: RootFlatNode,
-  TreeNode: RootTreeNode,
-} satisfies ConcreteType<NodeType<RootSpec>>
+    return tx.insertRoot(rootKey, flatValue) as StoredKey<
+      RootKey,
+      RootSpec['FlatValue']
+    >
+  },
+} satisfies RootType
 
 const initialValue: Spec<RootType>['JSONValue'] = {
   type: 'document',
   document: [{ type: 'paragraph', value: 'Hello, Rsbuild!' }],
 }
 
-function getFlatNode<C extends ConcreteType<NodeType>>(
-  Type: C,
+function getFlatNode<C extends NodeType>(
   store: EditorStore,
   key: Spec<C>['Key'],
-): InstanceType<C['FlatNode']> | null {
+): FlatNode<Spec<C>> | null {
   if (!store.has(key)) return null
 
-  return new Type.FlatNode(store, key) as InstanceType<C['FlatNode']>
+  return { store, key }
 }
 
 export default function App() {
   const { store } = useEditorStore()
-  const rootNode = useRef<InstanceType<RootType['FlatNode']> | null>(null)
+  const rootNode = useRef<FlatNode<RootSpec> | null>(null)
 
   useEffect(() => {
     setTimeout(() => {
-      rootNode.current = getFlatNode(RootType, store, 'root')
+      rootNode.current = getFlatNode<RootType>(store, 'root')
 
       if (rootNode.current) return
 
-      store.update((transaction) => {
-        const rootKey = new RootType.TreeNode(initialValue)
-          .toWritable(transaction)
-          .store('root')
+      store.update((tx) => {
+        const rootKey = RootType.storeRoot(initialValue, tx, 'root')
 
-        //@ts-expect-error
-        rootNode.current = new RootType.FlatNode(store, rootKey)
+        rootNode.current = { store, key: rootKey }
       })
     }, 1000)
   }, [store])
@@ -428,7 +432,8 @@ export default function App() {
           json: () => {
             if (rootNode.current == null) return ''
 
-            return JSON.stringify(rootNode.current.toJsonValue(), null, 2)
+            const jsonValue = RootType.toJsonValue(rootNode.current)
+            return JSON.stringify(jsonValue, null, 2)
           },
         }}
         showOnStartup={{ entries: true, json: true }}
