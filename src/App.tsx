@@ -27,8 +27,19 @@ type FlatValue =
   | NonRootKey[]
   | Record<string, NonRootKey>
 
+function isNonRootKey<T extends string>(
+  value: unknown,
+  type: T,
+): value is NonRootKey<T> {
+  return typeof value === 'string' && value.startsWith(`${type}:`)
+}
+
 interface Transaction {
-  update<F extends FlatValue>(key: Key, updateFn: F | ((current: F) => F)): void
+  update<F extends FlatValue>(
+    validator: (value: FlatValue) => value is F,
+    key: Key,
+    updateFn: F | ((current: F) => F),
+  ): void
   insertRoot<F extends FlatValue>(rootKey: RootKey, value: F): void
   insert<T extends string, F extends FlatValue>(
     typeName: T,
@@ -50,12 +61,16 @@ export class EditorStore {
     this.state = ydoc.getMap('state')
   }
 
-  getValue<F extends FlatValue>(key: Key): F {
+  getValue<F extends FlatValue>(
+    validator: (value: FlatValue) => value is F,
+    key: Key,
+  ): F {
     const value = this.values.get(key)
 
     invariant(value != null, `Value for key ${key} not found`)
+    invariant(validator(value), `Value for key ${key} has unexpected type`)
 
-    return value as F
+    return value
   }
 
   getParentKey(key: Key): Key | null {
@@ -106,11 +121,8 @@ export class EditorStore {
 
   private createNewTransaction(): Transaction {
     return {
-      update: <F extends FlatValue>(
-        key: Key,
-        updateFn: F | ((current: F) => F),
-      ) => {
-        const currentValue = this.getValue<F>(key)
+      update: (validator, key, updateFn) => {
+        const currentValue = this.getValue(validator, key)
         const newValue =
           typeof updateFn === 'function' ? updateFn(currentValue) : updateFn
 
@@ -182,29 +194,36 @@ interface FlatNode<S extends NodeSpec> {
   key: S['Key']
 }
 
-interface NodeType<S extends NodeSpec = NodeSpec> {
+interface AbstractNodeType<S extends NodeSpec> {
   __spec__(): S
-  typeName: S['TypeName']
-
+  isValidFlatValue(value: FlatValue): value is S['FlatValue']
   getFlatValue(node: FlatNode<S>): S['FlatValue']
   getParentKey(node: FlatNode<S>): S['ParentKey']
+}
+
+interface NodeType<S extends NodeSpec = NodeSpec> extends AbstractNodeType<S> {
+  typeName: S['TypeName']
   toJsonValue(node: FlatNode<S>): S['JSONValue']
 }
 
-function AbstractNodeType<S extends NodeSpec>() {
+function AbstractNode<S extends NodeSpec>() {
   return {
     __spec__(): S {
       throw new Error('This function should not be called')
     },
 
+    isValidFlatValue(_value: FlatValue): _value is S['FlatValue'] {
+      return true
+    },
+
     getFlatValue({ store, key }): S['FlatValue'] {
-      return store.getValue(key)
+      return store.getValue((f) => this.isValidFlatValue(f), key)
     },
 
     getParentKey({ store, key }): S['ParentKey'] {
       return store.getParentKey(key)
     },
-  } satisfies Partial<NodeType<S>>
+  } satisfies AbstractNodeType<S>
 }
 
 type Spec<N extends { __spec__: () => NodeSpec }> = ReturnType<N['__spec__']>
@@ -233,7 +252,11 @@ type TextSpec = NonRootSpec<{
 const TextType = {
   typeName: 'text' as const,
 
-  ...AbstractNodeType<TextSpec>(),
+  ...AbstractNode<TextSpec>(),
+
+  isValidFlatValue(value) {
+    return value instanceof Y.Text
+  },
 
   toJsonValue(node) {
     return this.getFlatValue(node).toString()
@@ -262,7 +285,11 @@ function WrappedNode<T extends string, C extends NonRootType>(
   return {
     typeName,
 
-    ...AbstractNodeType<WrappedNodeSpec<T, Spec<C>>>(),
+    ...AbstractNode<WrappedNodeSpec<T, Spec<C>>>(),
+
+    isValidFlatValue(value) {
+      return isNonRootKey(value, childType.typeName)
+    },
 
     toJsonValue(node) {
       const value = childType.toJsonValue(this.getChild(node))
@@ -295,6 +322,13 @@ interface ArrayNodeType<T extends string, C extends NonRootSpec>
   getChildren(node: FlatNode<ArrayNodeSpec<T, C>>): FlatNode<C>[]
 }
 
+function isArrayOf<C>(
+  value: unknown,
+  itemValidator: (v: unknown) => v is C,
+): value is C[] {
+  return Array.isArray(value) && value.every(itemValidator)
+}
+
 function ArrayNode<T extends string, C extends NonRootType>(
   typeName: T,
   childType: C,
@@ -302,7 +336,11 @@ function ArrayNode<T extends string, C extends NonRootType>(
   return {
     typeName,
 
-    ...AbstractNodeType<ArrayNodeSpec<T, Spec<C>>>(),
+    ...AbstractNode<ArrayNodeSpec<T, Spec<C>>>(),
+
+    isValidFlatValue(value) {
+      return isArrayOf(value, (v) => isNonRootKey(v, childType.typeName))
+    },
 
     // TODO: Why do I need a typecast here?!
     toJsonValue(node): Spec<C>['JSONValue'][] {
@@ -342,7 +380,11 @@ function RootType<C extends NonRootType>(childType: C) {
   return {
     typeName: 'root' as const,
 
-    ...AbstractNodeType<RootSpec<Spec<C>>>(),
+    ...AbstractNode<RootSpec<Spec<C>>>(),
+
+    isValidFlatValue(value) {
+      return isNonRootKey(value, childType.typeName)
+    },
 
     toJsonValue(node) {
       const value = this.getFlatValue(node)
