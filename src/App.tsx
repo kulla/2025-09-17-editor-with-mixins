@@ -244,15 +244,15 @@ const TextType = {
   },
 } satisfies NonRootType<TextSpec>
 
-type WrappedNodeSpec<T extends string, C extends NonRootType> = NonRootSpec<{
+type WrappedNodeSpec<T extends string, C extends NonRootSpec> = NonRootSpec<{
   TypeName: T
-  FlatValue: NonRootKey<Spec<C>['TypeName']>
-  JSONValue: { type: T; value: Spec<C>['JSONValue'] }
+  FlatValue: NonRootKey<C['TypeName']>
+  JSONValue: { type: T; value: C['JSONValue'] }
 }>
 
-interface WrappedNodeType<T extends string, C extends NonRootType>
+interface WrappedNodeType<T extends string, C extends NonRootSpec>
   extends NonRootType<WrappedNodeSpec<T, C>> {
-  getChild(node: FlatNode<WrappedNodeSpec<T, C>>): FlatNode<Spec<C>>
+  getChild(node: FlatNode<WrappedNodeSpec<T, C>>): FlatNode<C>
 }
 
 function WrappedNode<T extends string, C extends NonRootType>(
@@ -262,7 +262,7 @@ function WrappedNode<T extends string, C extends NonRootType>(
   return {
     typeName,
 
-    ...AbstractNodeType<WrappedNodeSpec<T, C>>(),
+    ...AbstractNodeType<WrappedNodeSpec<T, Spec<C>>>(),
 
     toJsonValue(node) {
       const value = childType.toJsonValue(this.getChild(node))
@@ -279,20 +279,20 @@ function WrappedNode<T extends string, C extends NonRootType>(
         childType.storeNonRoot(jsonValue.value, tx, key),
       )
     },
-  } satisfies WrappedNodeType<T, C>
+  } satisfies WrappedNodeType<T, Spec<C>>
 }
 
 const ParagraphType = WrappedNode('paragraph', TextType)
 
-type ArrayNodeSpec<T extends string, C extends NonRootType> = NonRootSpec<{
+type ArrayNodeSpec<T extends string, C extends NonRootSpec> = NonRootSpec<{
   TypeName: T
-  FlatValue: NonRootKey<Spec<C>['TypeName']>[]
-  JSONValue: Spec<C>['JSONValue'][]
+  FlatValue: NonRootKey<C['TypeName']>[]
+  JSONValue: C['JSONValue'][]
 }>
 
-interface ArrayNodeType<T extends string, C extends NonRootType>
+interface ArrayNodeType<T extends string, C extends NonRootSpec>
   extends NonRootType<ArrayNodeSpec<T, C>> {
-  getChildren(node: FlatNode<ArrayNodeSpec<T, C>>): FlatNode<Spec<C>>[]
+  getChildren(node: FlatNode<ArrayNodeSpec<T, C>>): FlatNode<C>[]
 }
 
 function ArrayNode<T extends string, C extends NonRootType>(
@@ -302,7 +302,7 @@ function ArrayNode<T extends string, C extends NonRootType>(
   return {
     typeName,
 
-    ...AbstractNodeType<ArrayNodeSpec<T, C>>(),
+    ...AbstractNodeType<ArrayNodeSpec<T, Spec<C>>>(),
 
     // TODO: Why do I need a typecast here?!
     toJsonValue(node): Spec<C>['JSONValue'][] {
@@ -318,7 +318,7 @@ function ArrayNode<T extends string, C extends NonRootType>(
         jsonValue.map((item) => childType.storeNonRoot(item, tx, key)),
       )
     },
-  } satisfies ArrayNodeType<T, C>
+  } satisfies ArrayNodeType<T, Spec<C>>
 }
 
 const ContentType = ArrayNode('content', ParagraphType)
