@@ -208,19 +208,19 @@ interface NodeType<S extends NodeSpec = NodeSpec> extends AbstractNodeType<S> {
 
 function AbstractNode<S extends NodeSpec>(): AbstractNodeType<S> {
   return {
-    __spec__(): S {
+    __spec__() {
       throw new Error('This function should not be called')
     },
 
     isValidFlatValue(_value: FlatValue): _value is S['FlatValue'] {
-      return true
+      throw new Error('isValidFlatValue not implemented')
     },
 
-    getFlatValue({ store, key }): S['FlatValue'] {
+    getFlatValue({ store, key }) {
       return store.getValue((f) => this.isValidFlatValue(f), key)
     },
 
-    getParentKey({ store, key }): S['ParentKey'] {
+    getParentKey({ store, key }) {
       return store.getParentKey(key)
     },
   }
