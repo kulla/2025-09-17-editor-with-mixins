@@ -327,7 +327,7 @@ interface RootSpec<C extends NonRootSpec> extends NodeSpec {
   TypeName: 'root'
   Key: RootKey
   FlatValue: NonRootKey<C['TypeName']>
-  JSONValue: { type: 'document'; document: C['JSONValue'] }
+  JSONValue: C['JSONValue']
 }
 
 interface RootType<C extends NonRootSpec> extends NodeType<RootSpec<C>> {
@@ -346,13 +346,11 @@ function RootType<C extends NonRootType>(childType: C) {
 
     toJsonValue(node) {
       const value = this.getFlatValue(node)
-      const doc = childType.toJsonValue({ store: node.store, key: value })
-
-      return { type: 'document', document: doc }
+      return childType.toJsonValue({ store: node.store, key: value })
     },
 
-    storeRoot({ document }, tx, rootKey) {
-      const flatValue = childType.storeNonRoot(document, tx, rootKey)
+    storeRoot(jsonValue, tx, rootKey) {
+      const flatValue = childType.storeNonRoot(jsonValue, tx, rootKey)
 
       tx.insertRoot(rootKey, flatValue)
     },
@@ -361,10 +359,9 @@ function RootType<C extends NonRootType>(childType: C) {
 
 type AppRootType = typeof AppRootType
 const AppRootType = RootType(ContentType)
-const initialValue: Spec<AppRootType>['JSONValue'] = {
-  type: 'document',
-  document: [{ type: 'paragraph', value: 'Hello, Rsbuild!' }],
-}
+const initialValue: Spec<AppRootType>['JSONValue'] = [
+  { type: 'paragraph', value: 'Hello, Rsbuild!' },
+]
 const rootKey: RootKey = 'root'
 
 export default function App() {
