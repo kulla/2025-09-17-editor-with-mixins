@@ -236,10 +236,6 @@ interface NonRootType<S extends NonRootSpec = NonRootSpec> extends NodeType<S> {
   ): StoredKey<NonRootKey<S['TypeName']>, S['FlatValue']>
 }
 
-function AbstractNonRootType<S extends NonRootSpec>() {
-  return AbstractNodeType<S>() satisfies Partial<NonRootType<S>>
-}
-
 type TextSpec = NonRootSpec<{
   TypeName: 'text'
   FlatValue: Y.Text
@@ -249,7 +245,7 @@ type TextSpec = NonRootSpec<{
 const TextType = {
   typeName: 'text' as const,
 
-  ...AbstractNonRootType<TextSpec>(),
+  ...AbstractNodeType<TextSpec>(),
 
   toJsonValue(node) {
     return this.getFlatValue(node).toString()
@@ -278,7 +274,7 @@ function WrappedNode<T extends string, C extends NonRootType>(
   return {
     typeName,
 
-    ...AbstractNonRootType<WrappedNodeSpec<T, C>>(),
+    ...AbstractNodeType<WrappedNodeSpec<T, C>>(),
 
     toJsonValue(node) {
       const value = childType.toJsonValue(this.getChild(node))
@@ -318,7 +314,7 @@ function ArrayNode<T extends string, C extends NonRootType>(
   return {
     typeName,
 
-    ...AbstractNonRootType<ArrayNodeSpec<T, C>>(),
+    ...AbstractNodeType<ArrayNodeSpec<T, C>>(),
 
     // TODO: Why do I need a typecast here?!
     toJsonValue(node): Spec<C>['JSONValue'][] {
