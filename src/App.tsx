@@ -196,11 +196,17 @@ interface FlatNode<S extends NodeSpec> {
 
 interface NodeType<S extends NodeSpec = NodeSpec> {
   typeName: S['TypeName']
-  getFlatValue(this: NodeType<S>, node: FlatNode<S>): S['FlatValue']
+  getFlatValue(node: FlatNode<S>): S['FlatValue']
   getParentKey(node: FlatNode<S>): S['ParentKey']
   isValidFlatValue(value: FlatValue): value is S['FlatValue']
   toJsonValue(node: FlatNode<S>): S['JSONValue']
   __spec__(): S
+}
+
+type Abstract<T extends object> = {
+  [K in keyof T]?: T[K] extends (...args: infer A) => infer R
+    ? (this: T, ...args: A) => R
+    : T[K]
 }
 
 function AbstractNode<S extends NodeSpec>() {
@@ -216,7 +222,7 @@ function AbstractNode<S extends NodeSpec>() {
     getParentKey({ store, key }) {
       return store.getParentKey(key)
     },
-  } satisfies Partial<NodeType<S>>
+  } satisfies Abstract<NodeType<S>>
 }
 
 type Spec<N extends { __spec__: () => NodeSpec }> = ReturnType<N['__spec__']>
@@ -232,14 +238,15 @@ function NonRootNode<S extends NonRootSpec>() {
 
   return {
     ...Base,
+
     getParentKey(node) {
-      const parentKey = Base.getParentKey(node)
+      const parentKey = Base.getParentKey.call(this, node)
 
       invariant(parentKey != null, 'Non-root node must have a parent key')
 
       return parentKey
     },
-  } satisfies Partial<NodeType<S>>
+  } satisfies Abstract<NodeType<S>>
 }
 
 interface NonRootType<S extends NonRootSpec = NonRootSpec> extends NodeType<S> {
