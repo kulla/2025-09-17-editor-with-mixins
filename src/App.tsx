@@ -296,60 +296,46 @@ function WrappedNode<T extends string, C extends NonRootType>(
 
 const ParagraphType = WrappedNode('paragraph', TextType)
 
-function ArrayNode<
-  T extends string,
-  C extends ConcreteType<AbstractNonRootType>,
->(typeName: T, childType: C) {
-  interface ArrayNodeSpec extends NonRootSpec {
-    TypeName: T
-    FlatValue: StoredKey<
-      NonRootKey<Spec<C>['TypeName']>,
-      Spec<C>['FlatValue']
-    >[]
-    JSONValue: Spec<C>['JSONValue'][]
-  }
-
-  class ArrayFlatNode extends AbstractNonRootType.FlatNode<ArrayNodeSpec> {
-    override toJsonValue(): ArrayNodeSpec['JSONValue'] {
-      return this.value.map((childKey) =>
-        new childType.FlatNode(this.store, childKey).toJsonValue(),
-      )
-    }
-
-    getChildren(
-      this: this & Writable,
-    ): (InstanceType<C['FlatNode']> & Writable)[]
-    getChildren(): InstanceType<C['FlatNode']>[]
-    getChildren() {
-      return this.value.map((child) =>
-        new childType.FlatNode(this.store, child).copyStateFrom(this),
-      )
-    }
-  }
-
-  class ArrayTreeNode extends AbstractNonRootType.TreeNode<ArrayNodeSpec> {
-    override store(this: this & Writable, parentKey: Key) {
-      return this.transaction.insert(typeName, parentKey, (key) =>
-        this.getChildren().map((child) => child.store(key)),
-      )
-    }
-
-    getChildren(
-      this: this & Writable,
-    ): (InstanceType<C['TreeNode']> & Writable)[]
-    getChildren(): InstanceType<C['TreeNode']>[]
-    getChildren() {
-      return this.jsonValue.map((child) =>
-        new childType.TreeNode(child).copyStateFrom(this),
-      )
-    }
-  }
-
-  return { FlatNode: ArrayFlatNode, TreeNode: ArrayTreeNode }
+interface ArrayNodeSpec<T extends string, C extends NonRootType>
+  extends NonRootSpec {
+  TypeName: T
+  FlatValue: StoredKey<NonRootKey<Spec<C>['TypeName']>, Spec<C>['FlatValue']>[]
+  JSONValue: Spec<C>['JSONValue'][]
 }
 
-type ContentType = typeof ContentType
-const ContentType = ArrayNode('content', ParagraphType)
+interface ArrayNodeType<T extends string, C extends NonRootType>
+  extends NonRootType<ArrayNodeSpec<T, C>> {
+  getChildren(
+    node: FlatNode<ToNodeSpec<ArrayNodeSpec<T, C>>>,
+  ): FlatNode<Spec<C>>[]
+}
+
+function ArrayNode<T extends string, C extends NonRootType>(
+  typeName: T,
+  childType: C,
+) {
+  return {
+    typeName,
+
+    ...AbstractNonRootType<ArrayNodeSpec<T, C>>(),
+
+    toJsonValue(node) {
+      return this.getChildren(node).map((child) => childType.toJsonValue(child))
+    },
+
+    getChildren(node) {
+      return this.getFlatValue(node).map((key) => ({ store: node.store, key }))
+    },
+
+    storeNonRoot(jsonValue, tx, parentKey) {
+      return tx.insert(typeName, parentKey, (key) =>
+        jsonValue.map((item) => childType.storeNonRoot(item, tx, key)),
+      )
+    },
+  } satisfies ArrayNodeType<T, C>
+}
+
+const ContentType = ArrayNode('document', ParagraphType)
 
 interface RootSpec extends NodeSpec {
   TypeName: 'root'
