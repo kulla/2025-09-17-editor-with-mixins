@@ -27,22 +27,14 @@ type FlatValue =
   | NonRootKey[]
   | Record<string, NonRootKey>
 
-type StoredKey<K extends Key, F extends FlatValue> = K & { __StoredType__: F }
-
 interface Transaction {
-  update<F extends FlatValue>(
-    key: StoredKey<Key, F>,
-    updateFn: F | ((current: F) => F),
-  ): void
-  insertRoot<F extends FlatValue>(
-    rootKey: RootKey,
-    value: F,
-  ): StoredKey<RootKey, F>
+  update<F extends FlatValue>(key: Key, updateFn: F | ((current: F) => F)): void
+  insertRoot<F extends FlatValue>(rootKey: RootKey, value: F): void
   insert<T extends string, F extends FlatValue>(
     typeName: T,
     parentKey: Key,
     createValue: (key: NonRootKey<T>) => F,
-  ): StoredKey<NonRootKey<T>, F>
+  ): NonRootKey<T>
 }
 
 export class EditorStore {
@@ -58,7 +50,7 @@ export class EditorStore {
     this.state = ydoc.getMap('state')
   }
 
-  getValue<F extends FlatValue>(key: StoredKey<Key, F>): F {
+  getValue<F extends FlatValue>(key: Key): F {
     const value = this.values.get(key)
 
     invariant(value != null, `Value for key ${key} not found`)
@@ -70,7 +62,7 @@ export class EditorStore {
     return this.parentKeys.get(key) ?? null
   }
 
-  has(key: Key): key is StoredKey<Key, FlatValue> {
+  has(key: Key): boolean {
     return this.values.has(key)
   }
 
@@ -114,12 +106,15 @@ export class EditorStore {
 
   private createNewTransaction(): Transaction {
     return {
-      update: (key, updateFn) => {
-        const currentValue = this.getValue(key)
+      update: <F extends FlatValue>(
+        key: Key,
+        updateFn: F | ((current: F) => F),
+      ) => {
+        const currentValue = this.getValue<F>(key)
         const newValue =
           typeof updateFn === 'function' ? updateFn(currentValue) : updateFn
 
-        this.storeValue(key, newValue)
+        this.values.set(key, newValue)
       },
       insertRoot: (rootKey, value) => {
         invariant(
@@ -127,29 +122,22 @@ export class EditorStore {
           `Root key ${rootKey} already exists in the store`,
         )
 
-        return this.storeValue(rootKey, value)
+        this.values.set(rootKey, value)
       },
       insert: (typeName, parentKey, createValue) => {
         const newKey = this.generateKey(typeName)
         const value = createValue(newKey)
 
         this.parentKeys.set(newKey, parentKey)
-        return this.storeValue(newKey, value)
+        this.values.set(newKey, value)
+
+        return newKey
       },
     }
   }
 
   private incrementUpdateCount() {
     this.state.set('updateCount', this.updateCount + 1)
-  }
-
-  private storeValue<K extends Key, F extends FlatValue>(
-    key: K,
-    value: F,
-  ): StoredKey<K, F> {
-    this.values.set(key, value)
-
-    return key as StoredKey<K, F>
   }
 
   private generateKey<T extends string>(typeName: T): NonRootKey<T> {
@@ -191,7 +179,7 @@ interface NodeSpec {
 
 interface FlatNode<S extends NodeSpec> {
   store: EditorStore
-  key: StoredKey<S['Key'], S['FlatValue']>
+  key: S['Key']
 }
 
 interface NodeType<S extends NodeSpec = NodeSpec> {
@@ -233,7 +221,7 @@ interface NonRootType<S extends NonRootSpec = NonRootSpec> extends NodeType<S> {
     jsonValue: S['JSONValue'],
     tx: Transaction,
     parentKey: Key,
-  ): StoredKey<NonRootKey<S['TypeName']>, S['FlatValue']>
+  ): NonRootKey<S['TypeName']>
 }
 
 type TextSpec = NonRootSpec<{
@@ -258,7 +246,7 @@ const TextType = {
 
 type WrappedNodeSpec<T extends string, C extends NonRootType> = NonRootSpec<{
   TypeName: T
-  FlatValue: StoredKey<NonRootKey<Spec<C>['TypeName']>, Spec<C>['FlatValue']>
+  FlatValue: NonRootKey<Spec<C>['TypeName']>
   JSONValue: { type: T; value: Spec<C>['JSONValue'] }
 }>
 
@@ -298,7 +286,7 @@ const ParagraphType = WrappedNode('paragraph', TextType)
 
 type ArrayNodeSpec<T extends string, C extends NonRootType> = NonRootSpec<{
   TypeName: T
-  FlatValue: StoredKey<NonRootKey<Spec<C>['TypeName']>, Spec<C>['FlatValue']>[]
+  FlatValue: NonRootKey<Spec<C>['TypeName']>[]
   JSONValue: Spec<C>['JSONValue'][]
 }>
 
@@ -339,10 +327,7 @@ const ContentType = ArrayNode('content', ParagraphType)
 interface RootSpec extends NodeSpec {
   TypeName: 'root'
   Key: RootKey
-  FlatValue: StoredKey<
-    NonRootKey<Spec<ContentType>['TypeName']>,
-    Spec<ContentType>['FlatValue']
-  >
+  FlatValue: NonRootKey<Spec<ContentType>['TypeName']>
   JSONValue: { type: 'document'; document: Spec<ContentType>['JSONValue'] }
 }
 
@@ -351,7 +336,7 @@ interface RootType extends NodeType<RootSpec> {
     jsonValue: RootSpec['JSONValue'],
     tx: Transaction,
     rootKey: RootKey,
-  ): StoredKey<RootKey, RootSpec['FlatValue']>
+  ): void
 }
 
 const RootType = {
@@ -360,7 +345,7 @@ const RootType = {
   ...AbstractNodeType<RootSpec>(),
 
   toJsonValue(node) {
-    const value = node.store.getValue(node.key)
+    const value = this.getFlatValue(node)
     const doc = ContentType.toJsonValue({ store: node.store, key: value })
 
     return { type: 'document', document: doc }
@@ -369,10 +354,7 @@ const RootType = {
   storeRoot(jsonValue, tx, rootKey) {
     const flatValue = ContentType.storeNonRoot(jsonValue.document, tx, rootKey)
 
-    return tx.insertRoot(rootKey, flatValue) as StoredKey<
-      RootKey,
-      RootSpec['FlatValue']
-    >
+    tx.insertRoot(rootKey, flatValue)
   },
 } satisfies RootType
 
@@ -380,31 +362,16 @@ const initialValue: Spec<RootType>['JSONValue'] = {
   type: 'document',
   document: [{ type: 'paragraph', value: 'Hello, Rsbuild!' }],
 }
-
-function getFlatNode<C extends NodeType>(
-  store: EditorStore,
-  key: Spec<C>['Key'],
-): FlatNode<Spec<C>> | null {
-  if (!store.has(key)) return null
-
-  return { store, key }
-}
+const rootKey: RootKey = 'root'
 
 export default function App() {
   const { store } = useEditorStore()
-  const rootNode = useRef<FlatNode<RootSpec> | null>(null)
 
   useEffect(() => {
     setTimeout(() => {
-      rootNode.current = getFlatNode<RootType>(store, 'root')
+      if (store.has(rootKey)) return
 
-      if (rootNode.current) return
-
-      store.update((tx) => {
-        const rootKey = RootType.storeRoot(initialValue, tx, 'root')
-
-        rootNode.current = { store, key: rootKey }
-      })
+      store.update((tx) => RootType.storeRoot(initialValue, tx, 'root'))
     }, 1000)
   }, [store])
 
@@ -427,9 +394,9 @@ export default function App() {
               )
               .join('\n'),
           json: () => {
-            if (rootNode.current == null) return ''
+            if (!store.has(rootKey)) return ''
 
-            const jsonValue = RootType.toJsonValue(rootNode.current)
+            const jsonValue = RootType.toJsonValue({ store, key: rootKey })
             return JSON.stringify(jsonValue, null, 2)
           },
         }}
