@@ -15,18 +15,18 @@
     "@picocss/pico": "^2.1.1",
     "clsx": "^2.1.1",
     "es-toolkit": "^1.39.10",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
     "yjs": "^13.6.27"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.2.4",
+    "@biomejs/biome": "^2.2.5",
     "@rsbuild/core": "^1.5.13",
     "@rsbuild/plugin-react": "^1.4.1",
-    "@tailwindcss/postcss": "^4.1.13",
-    "@types/react-dom": "^19.1.9",
-    "daisyui": "^5.1.25",
-    "tailwindcss": "^4.1.13",
-    "typescript": "^5.9.2"
+    "@tailwindcss/postcss": "^4.1.14",
+    "@types/react-dom": "^19.2.0",
+    "daisyui": "^5.1.27",
+    "tailwindcss": "^4.1.14",
+    "typescript": "^5.9.3"
   }
 }
