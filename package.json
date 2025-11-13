@@ -21,12 +21,12 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.2.5",
-    "@rsbuild/core": "^1.6.1",
-    "@rsbuild/plugin-react": "^1.4.1",
+    "@rsbuild/core": "^1.6.3",
+    "@rsbuild/plugin-react": "^1.4.2",
     "@tailwindcss/postcss": "^4.1.16",
     "@types/react-dom": "^19.2.2",
-    "daisyui": "^5.4.2",
-    "tailwindcss": "^4.1.16",
+    "daisyui": "^5.4.7",
+    "tailwindcss": "^4.1.17",
     "typescript": "^5.9.3"
   }
 }
